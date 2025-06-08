@@ -1,0 +1,1 @@
+# dARk Forcing: Formulate Discrete Diffusion as Auto-regressive via orderless next k-prediction
