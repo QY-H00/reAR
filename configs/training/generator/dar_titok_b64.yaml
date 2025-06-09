@@ -8,24 +8,22 @@ experiment:
     log_every: 50
     log_grad_norm_every: 1_000
     resume: True
-    tokenizer_checkpoint: "/home/ubuntu/ckpt/vqplus.bin"
+    tokenizer_checkpoint: "/home/ubuntu/ckpt/titok_b64.safetensors"
 
 model:
     vq_model:
-        model_type: "vqplus"
-        quantizer_type: "lookup"
+        model_type: "titok"
         codebook_size: 4096
-        token_size: 64
+        token_size: 12
+        use_l2_norm: True
         commitment_cost: 0.25
-        entropy_loss_weight: 0.0
-        entropy_loss_temperature: 0.01
-        entropy_gamma: 1.0
-        num_channels: 3  # rgb
-        hidden_channels: 128
-        channel_mult: [1,1,2,2,4]
-        num_resolutions: 5
-        num_res_blocks: 2
-        sample_with_conv: True
+        # vit arch
+        vit_enc_model_size: "base"
+        vit_dec_model_size: "base"
+        vit_enc_patch_size: 16
+        vit_dec_patch_size: 16
+        num_latent_tokens: 64
+        finetune_decoder: True
     
     generator:
         hidden_size: 768
@@ -52,7 +50,7 @@ model:
 dataset:
     params:
         # use pretokenized dataset for speed-up
-        pretokenization: "/home/ubuntu/dataset/pretokenized/vqplus.jsonl"
+        pretokenization: "/home/ubuntu/dataset/pretokenized/tiktok_b64.jsonl"
         train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..1023}.tar"
         eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0063}.tar"
         num_workers_per_gpu: 12

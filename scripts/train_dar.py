@@ -56,7 +56,20 @@ def main():
     if config.training.enable_wandb:
         tracker = "wandb"
 
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    if config.training.enable_swanlab:
+        from swanlab.integration.accelerate import SwanLabTracker
+        print("Use SwanLab to log")
+        tracker = SwanLabTracker(config.experiment.project, experiment_name=config.experiment.name)
+
+    ddp_kwargs = DistributedDataParallelKwargs()
+
+    # from accelerate.utils import TorchDynamoPlugin
+    # dynamo_plugin = TorchDynamoPlugin(
+    #     backend="inductor",  # Options: "inductor", "aot_eager", "aot_nvfuser", etc.
+    #     mode="default",      # Options: "default", "reduce-overhead", "max-autotune"
+    #     fullgraph=True,
+    #     dynamic=False
+    # )
 
     accelerator = Accelerator(
         gradient_accumulation_steps=config.training.gradient_accumulation_steps,
@@ -65,22 +78,27 @@ def main():
         project_dir=config.experiment.logging_dir,
         split_batches=False,
         kwargs_handlers=[ddp_kwargs],
+        # dynamo_plugin=dynamo_plugin
     )
 
     logger = setup_logger(name="dAR", log_level="INFO",
      output_file=f"{output_dir}/log{accelerator.process_index}.txt")
 
     if accelerator.is_main_process:
+        if config.training.enable_swanlab:
+            tracker.start()
+        
         accelerator.init_trackers(
             project_name=config.experiment.project,
             config=OmegaConf.to_container(config, resolve=True),
-            init_kwargs={
-                "wandb": {
-                    "entity": config.experiment.entity,
-                    "name": config.experiment.name,
-                    "id": config.experiment.name,
-                }
-            })
+            # init_kwargs={
+            #     "wandb": {
+            #         "entity": config.experiment.entity,
+            #         "name": config.experiment.name,
+            #         "id": config.experiment.name,
+            #     }
+            # }
+        )
         config_path = Path(output_dir) / "config.yaml"
         logger.info(f"Saving config to {config_path}")
         OmegaConf.save(config, config_path)
@@ -110,6 +128,7 @@ def main():
     # Prepare everything with accelerator.
     logger.info("Preparing model, optimizer and dataloaders")
     if config.dataset.params.get("pretokenization", ""):
+        logger.info("Using pretokenized dataset!!")
         model, optimizer, lr_scheduler, train_dataloader = accelerator.prepare(
             model, optimizer, lr_scheduler, train_dataloader
         )
@@ -120,6 +139,9 @@ def main():
         )
     if config.training.use_ema:
         ema_model.to(accelerator.device)
+
+    # Compile the model to further accelerate
+    model = torch.compile(model)
 
     total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
     num_batches = math.ceil(

@@ -15,3 +15,6 @@ wandb
 torch-fidelity
 torchinfo
 webdataset
+accelerate
+termcolor
+iopath

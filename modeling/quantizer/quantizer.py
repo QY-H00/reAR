@@ -262,7 +262,7 @@ class SimpleVectorizer(torch.nn.Module):
             entropy_loss=entropy_loss,
             per_sample_entropy=per_sample_entropy,
             avg_entropy=avg_entropy,
-            min_encoding_indices=min_encoding_indices.view(z_quantized.shape[0], z_quantized.shape[2], z_quantized.shape[3])
+            min_encoding_indices=min_encoding_indices.view(z_quantized.shape[0], -1)
         )
 
         return z_quantized, result_dict

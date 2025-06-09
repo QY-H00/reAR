@@ -8,7 +8,7 @@ experiment:
     log_every: 50
     log_grad_norm_every: 1_000
     resume: True
-    tokenizer_checkpoint: "maskgit-vqgan-imagenet-f16-256.bin"
+    tokenizer_checkpoint: "/home/ubuntu/ckpt/maskgitvq.bin"
 
 model:
     vq_model:
@@ -44,9 +44,9 @@ model:
 dataset:
     params:
         # use pretokenized dataset for speed-up
-        # pretokenization: "maskgitvq.jsonl"
-        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..0252}.tar"
-        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0009}.tar"
+        pretokenization: "/home/ubuntu/dataset/pretokenized/maskgitvq.jsonl"
+        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..1023}.tar"
+        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0063}.tar"
         num_workers_per_gpu: 12
     preprocessing:
         resize_shorter_edge: 256

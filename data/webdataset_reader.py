@@ -293,7 +293,7 @@ class PretoeknizedDataSetJSONL(Dataset):
     def __getitem__(self, idx):
         line = linecache.getline(self.jsonl_file, idx + 1).strip()
         data = json.loads(line)
-        return torch.tensor(data["class_id"]), torch.tensor(data["tokens"])
+        return torch.tensor(data["class_id"]), torch.tensor(data["tokens"]).reshape(-1)
     
 
 class PretokenizedWebDataset(SimpleImageDataset):

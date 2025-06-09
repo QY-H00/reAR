@@ -7,7 +7,7 @@ nvidia-smi
 cd ~/dGen
 source ~/.bashrc
 eval "$(conda shell.bash hook)"
-conda activate titok
+conda activate dar
 
 is_diffusion=True
 if [ "$is_diffusion" = "True" ]; then
@@ -54,7 +54,7 @@ for randomize_temperature in "${temperatures[@]}"; do
                 echo "  Port: ${port}"
                 
                 # Run the sampling with unique localhost port
-                torchrun --nnodes=1 --nproc_per_node=2 --rdzv-endpoint=localhost:${port} sample_imagenet_maskgit.py config=configs/training/generator/maskgit.yaml \
+                torchrun --nnodes=1 --nproc_per_node=2 --rdzv-endpoint=localhost:${port} sample_imagenet_dar.py config=configs/training/generator/maskgit.yaml \
                     experiment.output_dir="${output_dir}" \
                     experiment.tokenizer_checkpoint=yucornetto/tokenizer_titok_b64_imagenet \
                     experiment.generator_checkpoint=temp/maskgit_scratch_titokb64_dd_128bsz_l_nonuniform_loss/checkpoint-400000/ema_model/pytorch_model.bin \

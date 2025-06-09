@@ -5,10 +5,10 @@ experiment:
     save_every: 50_000
     eval_every: 50_000
     generate_every: 5_000
-    log_every: 50
+    log_every: 100
     log_grad_norm_every: 1_000
     resume: True
-    tokenizer_checkpoint: "yucornetto/tokenizer_titok_l32_imagenet"
+    tokenizer_checkpoint: "/home/ubuntu/ckpt/titok_l32.safetensors"
 
 model:
     vq_model:
@@ -38,9 +38,9 @@ model:
 
         # sampling hyper-params for RAR-B
         randomize_temperature: 1.0
-        guidance_scale: 16.0
-        guidance_scale_pow: 2.75
-        guidance_decay: "power-cosine"
+        guidance_scale: 3.0
+        guidance_scale_pow: 0.0
+        guidance_decay: "constant"
         num_steps: 16
         use_checkpoint: False # True to save memory
 
@@ -50,9 +50,9 @@ model:
 dataset:
     params:
         # use pretokenized dataset for speed-up
-        # pretokenization: "maskgitvq.jsonl"
-        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..0252}.tar"
-        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0009}.tar"
+        pretokenization: "/home/ubuntu/dataset/pretokenized/tiktok_l32.jsonl"
+        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..1023}.tar"
+        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0063}.tar"
         num_workers_per_gpu: 12
     preprocessing:
         resize_shorter_edge: 256

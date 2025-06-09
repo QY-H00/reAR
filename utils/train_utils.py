@@ -871,9 +871,14 @@ def reconstruct_images(model, original_images, fnames, accelerator,
         reconstructed_images
     )
     # Log images.
-    if config.training.enable_wandb:
+    if config.training.enable_swanlab:
+        accelerator.get_tracker("swanlab").log_images(
+            {"Train Reconstruction": images_for_saving},
+            step=global_step
+        )
+    elif config.training.enable_wandb:
         accelerator.get_tracker("wandb").log_images(
-            {f"Train Reconstruction": images_for_saving},
+            {"Train Reconstruction": images_for_saving},
             step=global_step
         )
     else:
@@ -913,7 +918,12 @@ def generate_images(model, tokenizer, accelerator,
         generated_image)
 
     # Log images.
-    if config.training.enable_wandb:
+    if config.training.enable_swanlab:
+        accelerator.get_tracker("swanlab").log_images(
+            {"Train Generated": [images_for_saving]},
+            step=global_step
+        )
+    elif config.training.enable_wandb:
         accelerator.get_tracker("wandb").log_images(
             {"Train Generated": [images_for_saving]}, step=global_step
         )

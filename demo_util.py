@@ -17,6 +17,7 @@ limitations under the License.
 
 
 import torch
+from safetensors.torch import load_model
 
 from omegaconf import OmegaConf
 from modeling.titok import TiTok, MaskgitVQ
@@ -63,9 +64,13 @@ def get_titok_tokenizer(config):
     # 1D Tokenizer from TiTok
     if "yucornetto" in config.experiment.tokenizer_checkpoint:
         tokenizer = TiTok.from_pretrained(config.experiment.tokenizer_checkpoint)
-    else:
+    elif "safetensors" in config.experiment.tokenizer_checkpoint:
         tokenizer = TiTok(config)
-        tokenizer.load_state_dict(torch.load(config.experiment.tokenizer_checkpoint, map_location="cpu"))
+        missing, unexpected = load_model(tokenizer, config.experiment.tokenizer_checkpoint, device="cpu", strict=True)
+    else: # ".bin"
+        tokenizer = TiTok(config)
+        state_dict = torch.load(config.experiment.tokenizer_checkpoint, map_location="cpu")
+        tokenizer.load_state_dict(state_dict)
     tokenizer.eval()
     tokenizer.requires_grad_(False)
     return tokenizer
