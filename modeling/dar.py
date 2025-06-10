@@ -226,14 +226,18 @@ class dAR(BaseModel):
         self.timesteps_embeddings = nn.init.trunc_normal_(
             nn.Parameter(torch.zeros(1, image_seq_len + 100, embed_dim)), 0., 0.02)
         self.adaln_before_head = FinalLayer(embed_dim, norm_layer=norm_layer)
-        self.lm_head = nn.Linear(embed_dim,
-                                 image_seq_len * target_codebook_size, bias=True)
         self.condition_num_classes = condition_num_classes
         self.image_seq_len = image_seq_len
         self.target_codebook_size = target_codebook_size
         self.none_condition_id = self.condition_num_classes + self.target_codebook_size + 1
         
         self.apply(init_weights)
+
+        self.lm_head = nn.Linear(embed_dim,
+            image_seq_len * target_codebook_size, bias=True)
+        
+        nn.init.trunc_normal_(self.lm_head.weight, mean=0.0, std=0.02) # lm_head weight seems to be instable
+        nn.init.zeros_(self.lm_head.bias)
 
         attn_mask = build_causal_mask(self.image_seq_len + 1024) # include condition
         self.register_buffer('attn_mask', attn_mask, persistent=False)

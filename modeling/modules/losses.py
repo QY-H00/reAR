@@ -456,6 +456,7 @@ class dARLoss(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.target_vocab_size = config.model.vq_model.codebook_size
+        self.no_mask = config.losses.get("no_mask", False)
         self.criterion = torch.nn.CrossEntropyLoss(reduction="none")
         N = config.model.generator.image_seq_len
         self.valid_mask =  torch.triu(torch.ones(N, N), diagonal=0)
@@ -487,12 +488,15 @@ class dARLoss(torch.nn.Module):
         shift_labels = shift_labels.view(shift_labels.shape[0], -1).to(shift_logits.device) # [B, N*N]
         loss = self.criterion(shift_logits, shift_labels)
 
-        mask = self.prediction_mask.to(loss.device)
-        mask = self.unshuffle_mask(mask, orders)
-        loss = loss.view(B, N, N)
-        loss = loss * mask
-        num_elements = mask.sum()
-        loss = loss.sum() / (num_elements * B + 1e-8)
+        if not self.no_mask:
+            mask = self.prediction_mask.to(loss.device)
+            mask = self.unshuffle_mask(mask, orders)
+            loss = loss.view(B, N, N)
+            loss = loss * mask
+            num_elements = mask.sum()
+            loss = loss.sum() / (num_elements * B + 1e-8)
+        else:
+            loss = loss.mean()
 
         correct_matrix = (torch.argmax(shift_logits, dim=1) == shift_labels).view(B, N, N)
         valid_mask = self.valid_mask.to(correct_matrix.device)
