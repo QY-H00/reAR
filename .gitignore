@@ -188,6 +188,9 @@ VIRTUAL_imagenet256_labeled_acts.npz
 scripts_transport/
 scripts_test/
 guided-diffusion/
+ours*
+ours_steps32_scale3.0_temperature1.0.npz
+evaluator/c2i_evaluator_torch.py
 
 # latex
 *.aux

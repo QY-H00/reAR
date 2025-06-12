@@ -112,25 +112,28 @@ def main():
     all_classes = np.array(all_classes[rank * subset_len: (rank+1)*subset_len], dtype=np.int64)
     cur_idx = 0
 
-    for _ in pbar:
-        y = torch.from_numpy(all_classes[cur_idx * n: (cur_idx+1)*n]).to(device)
-        cur_idx += 1
+    if any(os.scandir(sample_folder_dir)):
+        print(f"Files already exist in {sample_folder_dir}, skipping sampling loop.")
+    else:
+        for _ in pbar:
+            y = torch.from_numpy(all_classes[cur_idx * n: (cur_idx+1)*n]).to(device)
+            cur_idx += 1
 
-        samples = demo_util.sample_fn(
-            generator=generator,
-            tokenizer=tokenizer,
-            labels=y.long(),
-            randomize_temperature=config.model.generator.randomize_temperature,
-            guidance_scale=config.model.generator.guidance_scale,
-            guidance_scale_pow=config.model.generator.guidance_scale_pow,
-            guidance_decay="linear",
-            device=device
-        )
-        # Save samples to disk as individual .png files
-        for i, sample in enumerate(samples):
-            index = i * dist.get_world_size() + rank + total
-            Image.fromarray(sample).save(f"{sample_folder_dir}/{index:06d}.png")
-        total += global_batch_size
+            samples = demo_util.sample_fn(
+                generator=generator,
+                tokenizer=tokenizer,
+                labels=y.long(),
+                randomize_temperature=config.model.generator.randomize_temperature,
+                guidance_scale=config.model.generator.guidance_scale,
+                guidance_scale_pow=config.model.generator.guidance_scale_pow,
+                guidance_decay=config.model.generator.guidance_decay,
+                device=device
+            )
+            # Save samples to disk as individual .png files
+            for i, sample in enumerate(samples):
+                index = i * dist.get_world_size() + rank + total
+                Image.fromarray(sample).save(f"{sample_folder_dir}/{index:06d}.png")
+            total += global_batch_size
 
     # Make sure all processes have finished saving their samples before attempting to convert to .npz
     dist.barrier()

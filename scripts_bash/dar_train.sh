@@ -19,7 +19,7 @@ learning_rate=4e-4
 end_lr=1e-5
 max_train_steps=250_000
 warmup_steps=62_500
-no_mask=False
+no_mask=True
 
 accelerate launch \
     --num_machines=1 --num_processes=8 --machine_rank=0 \

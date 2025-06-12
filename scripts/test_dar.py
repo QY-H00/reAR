@@ -8,24 +8,24 @@ from data.imagenet_classes import imagenet_idx2classname
 import time
 
 if __name__ == "__main__":
-    guidance_scale = 4.0
+    guidance_scale = 3.0
     iters = 800000
-    T = 0.1
-    num_sample_steps = 8
-    guidance_scale_pow = 2.75
+    T = 1.0
+    num_sample_steps = 16
+    guidance_scale_pow = 0.0
     kv_cache = True
-    guidance_decay = "constant"
+    guidance_decay = "linear"
 
     # download the maskgit-vq tokenizer
     # hf_hub_download(repo_id="fun-research/TiTok", filename=f"maskgit-vqgan-imagenet-f16-256.bin", local_dir="./")
 
     # load config
     config = demo_util.get_config("configs/training/generator/dar_titok_l32.yaml")
-    config.experiment.generator_checkpoint = f"/home/qiyuan/dGen/temp/dar_b_titokl32_fix_loss_new/checkpoint-{iters}/unwrapped_model/pytorch_model.bin"
-    config.model.generator.hidden_size = 768
+    config.experiment.generator_checkpoint = "/home/ubuntu/dAR/temp/dar_titok_l32_main_more_warmup/checkpoint-250000/model.safetensors"
+    config.model.generator.hidden_size = 1024
     config.model.generator.num_hidden_layers = 24
     config.model.generator.num_attention_heads = 16
-    config.model.generator.intermediate_size = 3072
+    config.model.generator.intermediate_size = 4096
 
     device = "cuda"
     # maskgit-vq as tokenizer
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     print(f"Time taken for generation: {end_time - start_time} seconds")
 
     # create save dir
-    os.makedirs("assets/dar", exist_ok=True)
+    os.makedirs("temp/vis", exist_ok=True)
     # Create a grid of images with labels
     grid_size = int(np.ceil(np.sqrt(len(sample_labels))))
     grid_width = grid_size * generated_image[0].shape[1]
@@ -92,4 +92,4 @@ if __name__ == "__main__":
         grid_image.paste(temp_img, (x, y))
     
     # Save the grid image
-    grid_image.save(f"assets/dar/steps{num_sample_steps}_scale{guidance_scale}_T{T}_iters{iters}{'_kv_cache' if kv_cache else ''}_{guidance_decay}.png")
+    grid_image.save(f"temp/vis/steps{num_sample_steps}_scale{guidance_scale}_T{T}_iters{iters}{'_kv_cache' if kv_cache else ''}_{guidance_decay}.png")

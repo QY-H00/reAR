@@ -486,7 +486,7 @@ class dARLoss(torch.nn.Module):
         shift_logits = shift_logits.view(shift_logits.shape[0], self.target_vocab_size, -1) # [B, vocab_size, N*N]
         shift_labels = labels.repeat(1, N).contiguous() # [B, N*N]
         shift_labels = shift_labels.view(shift_labels.shape[0], -1).to(shift_logits.device) # [B, N*N]
-        loss = self.criterion(shift_logits, shift_labels)
+        loss = self.criterion(shift_logits, shift_labels) # [B, N*N]
 
         if not self.no_mask:
             mask = self.prediction_mask.to(loss.device)
@@ -494,7 +494,7 @@ class dARLoss(torch.nn.Module):
             loss = loss.view(B, N, N)
             loss = loss * mask
             num_elements = mask.sum()
-            loss = loss.sum() / (num_elements * B + 1e-8)
+            loss = loss.sum() / (num_elements + 1e-8)
         else:
             loss = loss.mean()
 

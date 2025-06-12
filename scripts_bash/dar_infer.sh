@@ -1,8 +1,8 @@
 nvidia-smi
-cd ~/dGen
+cd ~/dAR
 source ~/.bashrc
 eval "$(conda shell.bash hook)"
-conda activate titok
+conda activate dar
 
 export PYTHONPATH=$(pwd)
 

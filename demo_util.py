@@ -112,7 +112,10 @@ def get_rar_generator(config):
 def get_dar_generator(config):
     model_cls = dAR
     generator = model_cls(config)
-    generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
+    if "safetensors" in config.experiment.generator_checkpoint:
+        load_model(generator, config.experiment.generator_checkpoint, device="cpu", strict=True)
+    else:
+        generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
     generator.eval()
     generator.requires_grad_(False)
     return generator
