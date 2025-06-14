@@ -50,6 +50,63 @@ def init_weights(module):
         if module.weight is not None:
             module.weight.data.fill_(1.0)
 
+class DiffusionHead(nn.Module):
+    def __init__(self, dim, norm_layer, seq_len, vocab_size, k_tokens=4, type="simple"):
+        super().__init__()
+        self.type = type
+        self.vocab_size = vocab_size
+        if type == "simple":
+            assert k_tokens == vocab_size, "k_tokens should be equal to vocab_size if use simple head"
+            self.head = nn.Linear(dim, seq_len * vocab_size, bias=True)
+        elif type == "reduced":
+            self.pos_condition = nn.init.trunc_normal_(nn.Parameter(torch.zeros(1, seq_len, dim)), 0., 0.02)
+            self.prediction_head = nn.Linear(dim, vocab_size, bias=True)
+            self.norm_final = norm_layer(dim, elementwise_affine=False)
+            self.adaLN_modulation = nn.Sequential(
+                nn.SiLU(), nn.Linear(dim, 2*dim)
+            )
+            self.k_tokens = k_tokens
+        else:
+            raise ValueError(f"Invalid type: {type}")
+        
+    def forward(self, x, orders):
+        # x: [B, seq_len, dim]
+        # orders: [B, seq_len]
+        
+        if self.type == "simple":
+            return self.head(x)
+        elif self.type == "reduced":
+            B, seq_len, dim = x.shape
+            # Shuffle pos_condition according to orders
+            pos_condition_expanded = self.pos_condition.expand(B, -1, -1)
+            batch_indices = torch.arange(B, device=x.device).unsqueeze(1).expand(-1, seq_len)
+            shuffled_pos_condition = pos_condition_expanded[batch_indices, orders]  # [B, seq_len, dim]
+            
+            # Compute scale and shift from shuffled position condition
+            scale_shift = self.adaLN_modulation(shuffled_pos_condition)  # [B, seq_len, 2*dim]
+            scale, shift = scale_shift.chunk(2, dim=-1)  # Each: [B, seq_len, dim]
+            
+            # Duplicate x for k_tokens times
+            x_duplicated = x.unsqueeze(2).expand(-1, -1, self.k_tokens, -1)  # [B, seq_len, k_tokens, dim]
+            
+            # Modulate each token copy with scale and shift
+            scale_expanded = scale.unsqueeze(2).expand(-1, -1, self.k_tokens, -1)  # [B, seq_len, k_tokens, dim]
+            shift_expanded = shift.unsqueeze(2).expand(-1, -1, self.k_tokens, -1)  # [B, seq_len, k_tokens, dim]
+            
+            # Apply modulation: x * (1 + scale) + shift
+            x_modulated = modulate(self.norm_final(x_duplicated), shift_expanded, scale_expanded)  # [B, seq_len, k_tokens, dim]
+            
+            # Reshape for prediction head: [B, seq_len, k_tokens, dim] -> [B, seq_len * k_tokens, dim]
+            x_reshaped = x_modulated.reshape(B, seq_len * self.k_tokens, dim)
+            
+            # Forward through prediction head
+            logits = self.prediction_head(x_reshaped)  # [B, seq_len * k_tokens, vocab_size]
+            
+            # Reshape to final output: [B, seq_len, k_tokens * vocab_size]
+            output = logits.reshape(B, seq_len, self.k_tokens * self.vocab_size)
+            
+            return output
+
 # attention layer with KV cache supported
 class Attention(nn.Module):
     def __init__(
@@ -117,7 +174,7 @@ class Attention(nn.Module):
 def modulate(x, shift, scale):
     return x * (1 + scale) + shift
 
-class FinalLayer(nn.Module):
+class AdaLN(nn.Module):
     def __init__(self, dim, norm_layer):
         super().__init__()
         self.norm_final = norm_layer(dim, elementwise_affine=False)
@@ -129,7 +186,6 @@ class FinalLayer(nn.Module):
         scale, shift = self.adaLN_modulation(c).chunk(2, dim=-1)
         x = modulate(self.norm_final(x), shift, scale)
         return x
-    
 
 # basic transformer block
 class Block(nn.Module):
@@ -225,7 +281,7 @@ class dAR(BaseModel):
         # number of steps == image_seq_len
         self.timesteps_embeddings = nn.init.trunc_normal_(
             nn.Parameter(torch.zeros(1, image_seq_len + 100, embed_dim)), 0., 0.02)
-        self.adaln_before_head = FinalLayer(embed_dim, norm_layer=norm_layer)
+        self.adaln_before_head = AdaLN(embed_dim, norm_layer=norm_layer)
         self.condition_num_classes = condition_num_classes
         self.image_seq_len = image_seq_len
         self.target_codebook_size = target_codebook_size

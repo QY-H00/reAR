@@ -1,5 +1,5 @@
 config_name='dar_titok_l32'
-tag="no_mask"
+tag="with_correct_mask_new_lr_schedule"
 
 nvidia-smi
 cd ~/dAR
@@ -15,11 +15,11 @@ export NCCL_IB_DISABLE=0
 export NCCL_SOCKET_IFNAME=bond0 
 export NCCL_DEBUG=INFO
 
-learning_rate=4e-4
+learning_rate=8e-4
 end_lr=1e-5
 max_train_steps=250_000
-warmup_steps=62_500
-no_mask=True
+warmup_steps=10_000
+no_mask=False
 
 accelerate launch \
     --num_machines=1 --num_processes=8 --machine_rank=0 \

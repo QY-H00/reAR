@@ -465,18 +465,23 @@ class dARLoss(torch.nn.Module):
         row_indices = torch.arange(N).view(-1, 1)
         scaling_factors = 1.0 / (N - row_indices + 1e-8)  # Add small epsilon to avoid division by zero
         self.prediction_mask = self.valid_mask * scaling_factors
+        self.valid_mask = self.valid_mask.unsqueeze(0).repeat(self.batch_size, 1, 1)
         self.prediction_mask = self.prediction_mask.unsqueeze(0).repeat(self.batch_size, 1, 1)
         # self.prediction_mask = self.prediction_mask * ((N + 1) * N / 2) / torch.sum(self.prediction_mask)
 
     def unshuffle_mask(self, mask, orders):
         # Unshuffle the tensor based on the original orders
         B, N, N = mask.shape # orders: [B, N]
-        # batch_indices = torch.arange(B, device=mask.device).unsqueeze(1).unsqueeze(2).expand(-1, N, N)
-        unshuffled_mask = torch.zeros_like(mask)
-        # Fix broadcasting issue by expanding orders to match mask dimensions
-        orders_expanded = orders.unsqueeze(1).expand(-1, N, -1)  # [B, N, N]
-        # Use scatter_ to properly handle the indexing
-        unshuffled_mask.scatter_(2, orders_expanded, mask)
+        
+        # Create inverse order using vectorized operations
+        inverse_orders = torch.zeros_like(orders)
+        batch_indices = torch.arange(N, device=orders.device).unsqueeze(0).expand(B, -1)
+        inverse_orders.scatter_(1, orders, batch_indices)
+        
+        # Expand inverse orders to match mask dimensions for column-wise gathering
+        inverse_orders_expanded = inverse_orders.unsqueeze(1).expand(-1, N, -1)  # [B, N, N]
+        # Use torch.gather to reorder columns for all batches simultaneously
+        unshuffled_mask = torch.gather(mask, 2, inverse_orders_expanded)
         return unshuffled_mask
     
     def forward(self, logits: torch.Tensor, labels: torch.Tensor, orders: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
@@ -494,15 +499,16 @@ class dARLoss(torch.nn.Module):
             loss = loss.view(B, N, N)
             loss = loss * mask
             num_elements = mask.sum()
-            loss = loss.sum() / (num_elements + 1e-8)
+            loss = loss.sum() / num_elements
         else:
             loss = loss.mean()
 
         correct_matrix = (torch.argmax(shift_logits, dim=1) == shift_labels).view(B, N, N)
         valid_mask = self.valid_mask.to(correct_matrix.device)
+        valid_mask = self.unshuffle_mask(valid_mask, orders)
         correct_matrix = correct_matrix * valid_mask
         valid_num_elements = valid_mask.sum()
-        correct_tokens = correct_matrix.sum() / (valid_num_elements * B + 1e-8)
+        correct_tokens = correct_matrix.sum() / valid_num_elements
 
         return loss, {"loss": loss, "correct_tokens": correct_tokens}
 
