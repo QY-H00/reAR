@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from modeling.modules import BaseModel
+from modeling.modules.rope_attn import ShuffledRoPEAttention
 from functools import partial
 from timm.layers import Mlp
 import random
@@ -58,7 +59,11 @@ class DiffusionHead(nn.Module):
         if type == "simple":
             assert k_tokens == vocab_size, "k_tokens should be equal to vocab_size if use simple head"
             self.head = nn.Linear(dim, seq_len * vocab_size, bias=True)
-        elif type == "reduced":
+            
+            nn.init.trunc_normal_(self.head.weight, mean=0.0, std=0.02) # lm_head weight seems to be instable
+            nn.init.zeros_(self.head.bias)
+        elif type == "distributed":
+            self.cls_pos_condition = nn.init.trunc_normal_(nn.Parameter(torch.zeros(1, 1, dim)), 0., 0.02)
             self.pos_condition = nn.init.trunc_normal_(nn.Parameter(torch.zeros(1, seq_len, dim)), 0., 0.02)
             self.prediction_head = nn.Linear(dim, vocab_size, bias=True)
             self.norm_final = norm_layer(dim, elementwise_affine=False)
@@ -66,6 +71,11 @@ class DiffusionHead(nn.Module):
                 nn.SiLU(), nn.Linear(dim, 2*dim)
             )
             self.k_tokens = k_tokens
+
+            nn.init.constant_(self.adaLN_modulation[-1].weight, 0)
+            nn.init.constant_(self.adaLN_modulation[-1].bias, 0)
+            nn.init.trunc_normal_(self.prediction_head.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.prediction_head.bias)
         else:
             raise ValueError(f"Invalid type: {type}")
         
@@ -74,38 +84,47 @@ class DiffusionHead(nn.Module):
         # orders: [B, seq_len]
         
         if self.type == "simple":
-            return self.head(x)
-        elif self.type == "reduced":
+            logits = self.head(x)
+            return logits.reshape(logits.shape[0], logits.shape[1], self.k_tokens, self.vocab_size)
+        elif self.type == "distributed":
             B, seq_len, dim = x.shape
             # Shuffle pos_condition according to orders
             pos_condition_expanded = self.pos_condition.expand(B, -1, -1)
-            batch_indices = torch.arange(B, device=x.device).unsqueeze(1).expand(-1, seq_len)
-            shuffled_pos_condition = pos_condition_expanded[batch_indices, orders]  # [B, seq_len, dim]
+            batch_indices = torch.arange(B, device=x.device).unsqueeze(1).expand(-1, seq_len - 1)
+            shuffled_pos_condition = pos_condition_expanded[batch_indices, orders]  # [B, seq_len - 1, dim]
+            pre_pos_condition = self.cls_pos_condition.expand(B, -1, -1)
+            shuffled_pos_condition = torch.cat([pre_pos_condition, shuffled_pos_condition], dim=1) # [B, seq_len, dim]
             
             # Compute scale and shift from shuffled position condition
             scale_shift = self.adaLN_modulation(shuffled_pos_condition)  # [B, seq_len, 2*dim]
             scale, shift = scale_shift.chunk(2, dim=-1)  # Each: [B, seq_len, dim]
             
             # Duplicate x for k_tokens times
-            x_duplicated = x.unsqueeze(2).expand(-1, -1, self.k_tokens, -1)  # [B, seq_len, k_tokens, dim]
+            x_duplicated = x.unsqueeze(2).expand(B, seq_len, self.k_tokens, dim)  # [B, seq_len, k_tokens, dim]
             
-            # Modulate each token copy with scale and shift
-            scale_expanded = scale.unsqueeze(2).expand(-1, -1, self.k_tokens, -1)  # [B, seq_len, k_tokens, dim]
-            shift_expanded = shift.unsqueeze(2).expand(-1, -1, self.k_tokens, -1)  # [B, seq_len, k_tokens, dim]
+            # Modulate each token copy with scale and shift - MODIFIED LOGIC
+            # Create shifted scale pattern: scale[:, :, k, :] := scale[:, k:, :] with last element duplicated
+            B, seq_len, dim = scale.shape
+            
+            # Create shifting indices matrix: for each position i and shift k, get min(i+k, seq_len-1)
+            pos_range = torch.arange(seq_len, device=scale.device)  # [seq_len]
+            k_range = torch.arange(self.k_tokens, device=scale.device)  # [k_tokens]
+            
+            # Create meshgrid for all combinations of positions and k values
+            pos_grid, k_grid = torch.meshgrid(pos_range, k_range, indexing='ij')  # both [seq_len, k_tokens]
+            shift_indices = torch.clamp(pos_grid + k_grid, 0, seq_len - 1)  # [seq_len, k_tokens]
+            
+            # Now create scale_expanded and shift_expanded by proper indexing
+            # We want scale_expanded[b, i, k, d] = scale[b, shift_indices[i, k], d]
+            scale_expanded = scale[:, shift_indices, :]  # [B, seq_len, k_tokens, dim]
+            shift_expanded = shift[:, shift_indices, :]  # [B, seq_len, k_tokens, dim]
             
             # Apply modulation: x * (1 + scale) + shift
             x_modulated = modulate(self.norm_final(x_duplicated), shift_expanded, scale_expanded)  # [B, seq_len, k_tokens, dim]
             
-            # Reshape for prediction head: [B, seq_len, k_tokens, dim] -> [B, seq_len * k_tokens, dim]
-            x_reshaped = x_modulated.reshape(B, seq_len * self.k_tokens, dim)
-            
             # Forward through prediction head
-            logits = self.prediction_head(x_reshaped)  # [B, seq_len * k_tokens, vocab_size]
-            
-            # Reshape to final output: [B, seq_len, k_tokens * vocab_size]
-            output = logits.reshape(B, seq_len, self.k_tokens * self.vocab_size)
-            
-            return output
+            logits = self.prediction_head(x_modulated)  # [B, seq_len, k_tokens, vocab_size]
+            return logits
 
 # attention layer with KV cache supported
 class Attention(nn.Module):
@@ -201,19 +220,30 @@ class Block(nn.Module):
             act_layer: nn.Module = nn.GELU,
             norm_layer: nn.Module = nn.LayerNorm,
             mlp_layer: nn.Module = Mlp,
+            rope_type: str = 'none'
     ) -> None:
         super().__init__()
         self.norm1 = norm_layer(dim)
         
-        self.attn = Attention(
-            dim=dim,
-            num_heads=num_heads,
-            qkv_bias=qkv_bias,
-            qk_norm=qk_norm,
-            attn_drop=attn_drop,
-            proj_drop=proj_drop,
-            norm_layer=norm_layer,
-        )
+        if rope_type == 'none':
+            self.attn = Attention(
+                dim=dim,
+                num_heads=num_heads,
+                qkv_bias=qkv_bias,
+                qk_norm=qk_norm,
+                attn_drop=attn_drop,
+                proj_drop=proj_drop,
+                norm_layer=norm_layer,
+            )
+        else:
+            self.attn = ShuffledRoPEAttention(
+                dim=dim,
+                num_heads=num_heads,
+                qkv_bias=qkv_bias,
+                qk_norm=qk_norm,
+                attn_drop=attn_drop,
+                rope_type=rope_type
+            )
 
         self.norm2 = norm_layer(dim)
         self.mlp = mlp_layer(
@@ -229,9 +259,12 @@ class Block(nn.Module):
         )
 
 
-    def forward(self, x: torch.Tensor, attn_mask=None, c = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, attn_mask=None, c = None, orders=None) -> torch.Tensor:
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=-1)
-        x = x + gate_msa * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), attn_mask=attn_mask)
+        if not hasattr(self.attn, "rope_type"):
+            x = x + gate_msa * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), attn_mask=attn_mask)
+        else:
+            x = x + gate_msa * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), orders=orders, attn_mask=attn_mask)
         x = x + gate_mlp * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
 
@@ -251,6 +284,7 @@ class dAR(BaseModel):
         image_seq_len = config.model.generator.image_seq_len
         target_codebook_size = config.model.vq_model.codebook_size
         condition_num_classes = config.model.generator.condition_num_classes
+        rope_type = config.model.generator.rope_type
         norm_layer=partial(nn.LayerNorm, eps=1e-6)
 
         dropout_rate = config.model.generator.dropout
@@ -266,7 +300,9 @@ class dAR(BaseModel):
                 qk_norm=True,
                 proj_drop=dropout_rate,
                 attn_drop=attn_dropout_rate,
-                norm_layer=norm_layer)
+                norm_layer=norm_layer,
+                rope_type=rope_type
+            )
             for i in range(depth)])
 
         self.embeddings = nn.Embedding(
@@ -289,19 +325,26 @@ class dAR(BaseModel):
         
         self.apply(init_weights)
 
-        self.lm_head = nn.Linear(embed_dim,
-            image_seq_len * target_codebook_size, bias=True)
-        
-        nn.init.trunc_normal_(self.lm_head.weight, mean=0.0, std=0.02) # lm_head weight seems to be instable
-        nn.init.zeros_(self.lm_head.bias)
+        # self.lm_head = nn.Linear(embed_dim,
+        #     image_seq_len * target_codebook_size, bias=True)
+        # nn.init.trunc_normal_(self.lm_head.weight, mean=0.0, std=0.02) # lm_head weight seems to be instable
+        # nn.init.zeros_(self.lm_head.bias)
 
+        self.lm_head = DiffusionHead(
+            embed_dim,
+            norm_layer=norm_layer,
+            seq_len=image_seq_len,
+            vocab_size=target_codebook_size,
+            k_tokens=config.model.generator.get("k_tokens", image_seq_len),
+            type=config.model.generator.get("head_type", "simple")
+        )
+        
         attn_mask = build_causal_mask(self.image_seq_len + 1024) # include condition
         self.register_buffer('attn_mask', attn_mask, persistent=False)
 
         self.use_checkpoint = config.model.generator.get("use_checkpoint", False)
 
         # init for adaln-zero.
-
         nn.init.constant_(self.adaln_before_head.adaLN_modulation[-1].weight, 0)
         nn.init.constant_(self.adaln_before_head.adaLN_modulation[-1].bias, 0)
         for block in self.blocks:
@@ -309,16 +352,19 @@ class dAR(BaseModel):
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
         self.random_ratio = 1.0
+        self.kv_cache = False
 
     def enable_kv_cache(self):
         for block in self.blocks:
             block.attn.kv_cache = True
             block.attn.reset_kv_cache()
+        self.kv_cache = True
 
     def disable_kv_cache(self):
         for block in self.blocks:
             block.attn.kv_cache = False
             block.attn.reset_kv_cache()
+        self.kv_cache = False
 
     def sample_orders(self, x):
         batch_size = x.shape[0]
@@ -405,7 +451,7 @@ class dAR(BaseModel):
         if not is_sampling:
             # No need to shuffle labels for dAR
             # labels = self.shuffle(labels, orders)
-            # randomized permutation: shuffle the embeddings of image tokens
+            # randomized permutation: shuffle the embeddings of input image tokens
             embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:], orders)], dim=1)
 
         x = embeddings
@@ -434,18 +480,21 @@ class dAR(BaseModel):
         for idx, blk in enumerate(self.blocks):
             if self.use_checkpoint:
                 x = torch.utils.checkpoint.checkpoint(
-                        blk.forward, x, attn_mask, condition_token, use_reentrant=False)
+                        blk.forward, x, attn_mask, condition_token, orders, use_reentrant=False)
             else:
-                x = blk(x, attn_mask=attn_mask, c=condition_token)
+                x = blk(x, attn_mask=attn_mask, c=condition_token, orders=orders)
 
         if not self.blocks[0].attn.kv_cache:
             # remove cls token
             x = x[:, prefix - 1:]
             condition_token = condition_token[:, prefix - 1:]
         x = self.adaln_before_head(x, condition_token)
-        x = self.lm_head(x) # [B, image_seq_len, vocab_size * image_seq_len]
-        x = x.reshape(x.shape[0], x.shape[1], self.image_seq_len, self.target_codebook_size)
-
+        
+        if self.kv_cache:
+            x = self.lm_head(x, orders[:, start_idx:])
+        else:
+            x = self.lm_head(x, orders) # [B, image_seq_len, k_tokens, vocab_size]
+        
         if return_labels:
             return x, labels, orders
         return x
@@ -487,9 +536,13 @@ class dAR(BaseModel):
         orders = self.sample_orders(ids)
         # print("orders:", orders)
         token_len = 0
+        current_orders = orders[:, :token_len]
         for step in range(num_sample_steps):
             ratio = 1. * (step + 1) / num_sample_steps
-            annealed_temp = randomize_temperature * (1.0 - ratio)
+            if kwargs.get("use_annealed_temp", True):
+                annealed_temp = randomize_temperature * (1.0 - ratio)
+            else:
+                annealed_temp = randomize_temperature
             # token_ratio = 1 - np.arccos(ratio) / (math.pi * 0.5)
             token_ratio = ratio
             
@@ -498,11 +551,10 @@ class dAR(BaseModel):
                 scale_step = (1 - torch.cos(((step / num_sample_steps) ** guidance_scale_pow) * torch.pi)) * 1/2
                 cfg_scale = (guidance_scale - 1) * scale_step + 1
             elif guidance_decay == "linear":
-                cfg_scale = ratio * guidance_scale
+                cfg_scale = ratio * (guidance_scale - 1) + 1
             elif guidance_decay == "constant":
                 cfg_scale = guidance_scale
             
-            current_orders = orders[:, :token_len]
             if guidance_scale != 0:
                 logits = self.forward_fn(
                     torch.cat([ids, ids], dim=0),
@@ -517,17 +569,80 @@ class dAR(BaseModel):
                 ) # [B, len(ids), image_seq_len, vocab_size]
             
             logits = logits[:, -1] # [B, image_seq_len, vocab_size]
-            token_len = int(self.image_seq_len * token_ratio)
-            current_orders = orders[:, :token_len]
-            next_token_indices = orders[:, ids.shape[1]:token_len]
             batch_size = logits.shape[0]
-            batch_indices = torch.arange(batch_size, device=device).unsqueeze(1)
-            batch_indices = batch_indices.expand(-1, next_token_indices.shape[1])
-            logits = logits[batch_indices, next_token_indices] # [B, N_t, vocab_size]
-
-            sampled_ids = self.add_gumbel_noise(logits, annealed_temp).argmax(dim=-1)
+            top_k = kwargs.get('top_k', None)
+            top_p = kwargs.get('top_p', None)
+            if top_k is not None:
+                assert top_p is None, "Cannot use top-k and top-p together"
+                # First filter by top-k
+                top_k_logits = logits.topk(k=top_k, dim=-1)
+                # Then add gumbel noise and take argmax
+                sampled_ids = self.add_gumbel_noise(top_k_logits.values, annealed_temp).argmax(dim=-1)
+                # Map back to original token indices
+                sampled_ids = torch.gather(top_k_logits.indices, dim=-1, index=sampled_ids.unsqueeze(-1)).squeeze(-1)
+            elif kwargs.get('top_p', None) is not None:
+                # Top-p (nucleus) sampling
+                top_p = kwargs.get('top_p')
+                # Sort logits in descending order
+                sorted_logits, sorted_indices = torch.sort(logits, dim=-1, descending=True)
+                # Convert to probabilities
+                sorted_probs = F.softmax(sorted_logits, dim=-1)
+                # Compute cumulative probabilities
+                cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+                # Create mask for tokens to keep (cumulative probability <= top_p)
+                sorted_indices_to_remove = cumulative_probs > top_p
+                # Shift the mask to include the first token above threshold
+                sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+                sorted_indices_to_remove[..., 0] = 0
+                # Set logits of removed tokens to negative infinity
+                filtered_logits = sorted_logits.clone()
+                filtered_logits[sorted_indices_to_remove] = float('-inf')
+                # Add gumbel noise and take argmax
+                sampled_indices = self.add_gumbel_noise(filtered_logits, annealed_temp).argmax(dim=-1)
+                # Map back to original token indices
+                sampled_ids = torch.gather(sorted_indices, dim=-1, index=sampled_indices.unsqueeze(-1)).squeeze(-1)
+            else:
+                sampled_ids = self.add_gumbel_noise(logits, annealed_temp).argmax(dim=-1)
+            
+            token_len = int(self.image_seq_len * token_ratio)
+            
+            if not kwargs.get("maskgit_sampling", False):
+                if self.lm_head.type == "distributed":
+                    current_orders = orders[:, :token_len]
+                    sampled_ids = sampled_ids[:, :min(token_len, sampled_ids.shape[1])]
+                else:
+                    current_orders = orders[:, :token_len]
+                    next_token_indices = orders[:, ids.shape[1]:token_len]
+                    batch_indices = torch.arange(batch_size, device=device).unsqueeze(1)
+                    batch_indices = batch_indices.expand(-1, next_token_indices.shape[1])
+                    sampled_ids = sampled_ids[batch_indices, next_token_indices]
+            else:
+                assert self.lm_head.type == "simple", "Maskgit sampling is only supported for simple head"
+                import numpy as np
+                import math
+                token_len = int(np.floor(self.image_seq_len * (1 - np.arccos(ratio) / (math.pi * 0.5))))
+                token_len = max(token_len, 1 + ids.shape[1])
+                sampled_logits = torch.squeeze(
+                    torch.gather(logits, dim=-1, index=torch.unsqueeze(sampled_ids, -1)), -1)
+        
+                batch_indices = torch.arange(batch_size, device=sampled_logits.device).unsqueeze(1).expand(-1, current_orders.shape[1])
+                mask = torch.zeros_like(sampled_logits, dtype=torch.bool)
+                mask[batch_indices, current_orders] = True
+                sampled_logits = torch.where(mask, sampled_logits, +np.inf).float()
+                # choose proper confidence
+                confidence = self.add_gumbel_noise(sampled_logits, annealed_temp)
+                sorted_confidence, sorted_indices = torch.sort(confidence, axis=-1, descending=True)
+                # Get the indices of the top num_new_tokens highest confidence values
+                next_token_indices = sorted_indices[:, :token_len - ids.shape[1]]  # [B, token_len - ids.shape[1]]
+                batch_indices = torch.arange(batch_size, device=device).unsqueeze(1)
+                batch_indices = batch_indices.expand(-1, next_token_indices.shape[1])
+                sampled_ids = sampled_ids[batch_indices, next_token_indices]
+                current_orders = torch.cat([current_orders, next_token_indices], dim=1)
+            
             sampled = sampled_ids.reshape(ids.shape[0], -1) # [B, N_t]
             ids = torch.cat((ids, sampled), dim = -1)
+        
+        orders = current_orders
         if not kwargs.get("fix_orders", False):
             ids = self.unshuffle(ids, orders)
         self.disable_kv_cache()

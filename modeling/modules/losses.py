@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch.cuda.amp import autocast
 
+from .dar_utils import shuffle, sliding_window_shift, build_sliding_mask
 from .perceptual_loss import PerceptualLoss
 from .discriminator import NLayerDiscriminator
 
@@ -457,16 +458,27 @@ class dARLoss(torch.nn.Module):
         super().__init__()
         self.target_vocab_size = config.model.vq_model.codebook_size
         self.no_mask = config.losses.get("no_mask", False)
+        self.no_weight = config.losses.get("no_weight", False)
         self.criterion = torch.nn.CrossEntropyLoss(reduction="none")
         N = config.model.generator.image_seq_len
-        self.valid_mask =  torch.triu(torch.ones(N, N), diagonal=0)
+        self.head_type = config.model.generator.get("head_type", "simple")
+        self.k_tokens = config.model.generator.get("k_tokens", N)
         self.batch_size = config.training.per_gpu_batch_size
         # self.valid_mask = torch.ones(N, N)
-        row_indices = torch.arange(N).view(-1, 1)
-        scaling_factors = 1.0 / (N - row_indices + 1e-8)  # Add small epsilon to avoid division by zero
-        self.prediction_mask = self.valid_mask * scaling_factors
-        self.valid_mask = self.valid_mask.unsqueeze(0).repeat(self.batch_size, 1, 1)
-        self.prediction_mask = self.prediction_mask.unsqueeze(0).repeat(self.batch_size, 1, 1)
+        
+        if self.head_type == "simple":
+            self.valid_mask =  torch.triu(torch.ones(N, N), diagonal=0)
+            row_indices = torch.arange(N).view(-1, 1)
+            scaling_factors = 1.0 / (N - row_indices + 1e-8)  # Add small epsilon to avoid division by zero
+            if self.no_weight:
+                self.prediction_mask = self.valid_mask
+            else:
+                self.prediction_mask = self.valid_mask * scaling_factors
+            self.valid_mask = self.valid_mask.unsqueeze(0).repeat(self.batch_size, 1, 1)
+            self.prediction_mask = self.prediction_mask.unsqueeze(0).repeat(self.batch_size, 1, 1)
+        else:
+            self.prediction_mask = build_sliding_mask(N, self.k_tokens).unsqueeze(0).repeat(self.batch_size, 1, 1)
+            self.valid_mask = self.prediction_mask.clone()
         # self.prediction_mask = self.prediction_mask * ((N + 1) * N / 2) / torch.sum(self.prediction_mask)
 
     def unshuffle_mask(self, mask, orders):
@@ -483,10 +495,10 @@ class dARLoss(torch.nn.Module):
         # Use torch.gather to reorder columns for all batches simultaneously
         unshuffled_mask = torch.gather(mask, 2, inverse_orders_expanded)
         return unshuffled_mask
-    
-    def forward(self, logits: torch.Tensor, labels: torch.Tensor, orders: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
-        # logits: B, image_seq_len, image_seq_len, vocab_size
-        B, input_len, N, vocab_size = logits.shape
+
+    def forward_fn_simple(self, logits: torch.Tensor, labels: torch.Tensor, orders: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
+        B, N_with_cls, k_tokens, vocab_size = logits.shape
+        N = N_with_cls - 1
         shift_logits = logits[..., :-1, :, :].view(B, N ** 2, vocab_size).permute(0, 2, 1).contiguous() # (B, N+1, N, V) -> (B, V, N*N)
         shift_logits = shift_logits.view(shift_logits.shape[0], self.target_vocab_size, -1) # [B, vocab_size, N*N]
         shift_labels = labels.repeat(1, N).contiguous() # [B, N*N]
@@ -511,6 +523,38 @@ class dARLoss(torch.nn.Module):
         correct_tokens = correct_matrix.sum() / valid_num_elements
 
         return loss, {"loss": loss, "correct_tokens": correct_tokens}
+
+    def forward_fn_distributed(self, logits: torch.Tensor, labels: torch.Tensor, orders: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
+        B, N_with_cls, k_tokens, vocab_size = logits.shape
+        N = N_with_cls - 1
+        shift_logits = logits[..., :-1, :, :].view(B, N*k_tokens, vocab_size).permute(0, 2, 1).contiguous() # [B, N, k_tokens, vocab_size]
+        shuffled_labels = shuffle(labels, orders) # [B, N]
+        shuffled_next_k_labels = sliding_window_shift(shuffled_labels, k_tokens).view(B, N * k_tokens).contiguous().to(shift_logits.device) # [B, N, k_tokens]
+        loss = self.criterion(shift_logits, shuffled_next_k_labels) # [B, N*k_tokens]
+        if not self.no_mask:
+            loss = loss.view(B, N, k_tokens)
+            loss = loss * self.prediction_mask.to(loss.device)
+            num_elements = self.prediction_mask.sum()
+            loss = loss.sum() / num_elements
+        else:
+            loss = loss.mean()
+
+        correct_matrix = (torch.argmax(shift_logits, dim=1) == shuffled_next_k_labels).view(B, N, k_tokens)
+        valid_mask = self.valid_mask.to(correct_matrix.device)
+        correct_matrix = correct_matrix * valid_mask
+        valid_num_elements = valid_mask.sum()
+        correct_tokens = correct_matrix.sum() / valid_num_elements
+
+        return loss, {"loss": loss, "correct_tokens": correct_tokens}
+    
+    def forward(self, logits: torch.Tensor, labels: torch.Tensor, orders: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
+        # logits: B, image_seq_len, k_tokens, vocab_size
+        if self.head_type == "simple":
+            return self.forward_fn_simple(logits, labels, orders)
+        elif self.head_type == "distributed":
+            return self.forward_fn_distributed(logits, labels, orders)
+        else:
+            raise NotImplementedError
 
 class MDLMLoss(torch.nn.Module):
     def __init__(self, config):

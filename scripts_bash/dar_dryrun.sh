@@ -2,7 +2,7 @@
 #PBS -S /bin/bash
 #PBS -l select=1:ncpus=48:mem=360gb:ngpus=8:host=cvml10
 
-config_name='dar_titok_l32'
+config_name='dar_maskgitvq'
 tag="dryrun_test"
 
 nvidia-smi
@@ -29,15 +29,19 @@ accelerate launch \
     experiment.entity="hodavid538" \
     experiment.output_dir="temp/${config_name}_${tag}" \
     training.enable_swanlab=True \
-    model.generator.hidden_size=1024 \
-    model.generator.num_hidden_layers=24 \
+    model.generator.hidden_size=768 \
+    model.generator.num_hidden_layers=19 \
     model.generator.num_attention_heads=16 \
     model.generator.intermediate_size=3072 \
+    model.generator.rope_type="2d" \
+    model.generator.head_type="distributed" \
+    model.generator.k_tokens=4 \
     training.per_gpu_batch_size=256 \
     training.gradient_accumulation_steps=1 \
     lr_scheduler.params.learning_rate=1e-4 \
     lr_scheduler.params.warmup_steps=62_500 \
     training.max_train_steps=250_000 \
+    training.use_ema=True \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000049}.tar" \
     \
@@ -46,3 +50,4 @@ accelerate launch \
     experiment.generate_every=100 \
     experiment.log_every=100 \
     \
+    losses.no_mask=False \

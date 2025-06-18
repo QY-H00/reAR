@@ -17,8 +17,8 @@ limitations under the License.
 
 
 import torch
-from safetensors.torch import load_model
 
+from safetensors.torch import load_model
 from omegaconf import OmegaConf
 from modeling.titok import TiTok, MaskgitVQ
 from modeling.maskgit import ImageBert, UViTBert
@@ -64,13 +64,9 @@ def get_titok_tokenizer(config):
     # 1D Tokenizer from TiTok
     if "yucornetto" in config.experiment.tokenizer_checkpoint:
         tokenizer = TiTok.from_pretrained(config.experiment.tokenizer_checkpoint)
-    elif "safetensors" in config.experiment.tokenizer_checkpoint:
+    else:
         tokenizer = TiTok(config)
-        missing, unexpected = load_model(tokenizer, config.experiment.tokenizer_checkpoint, device="cpu", strict=True)
-    else: # ".bin"
-        tokenizer = TiTok(config)
-        state_dict = torch.load(config.experiment.tokenizer_checkpoint, map_location="cpu")
-        tokenizer.load_state_dict(state_dict)
+        tokenizer.load_state_dict(torch.load(config.experiment.tokenizer_checkpoint, map_location="cpu"))
     tokenizer.eval()
     tokenizer.requires_grad_(False)
     return tokenizer
@@ -103,7 +99,12 @@ def get_titok_generator(config):
 def get_rar_generator(config):
     model_cls = RAR
     generator = model_cls(config)
-    generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
+    if ".safetensors" in config.experiment.generator_checkpoint:
+        missing, unexpected = load_model(generator, config.experiment.generator_checkpoint, device="cpu")
+        print(missing)
+        print(unexpected)
+    else:
+        generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
     generator.eval()
     generator.requires_grad_(False)
     generator.set_random_ratio(0)
@@ -112,8 +113,10 @@ def get_rar_generator(config):
 def get_dar_generator(config):
     model_cls = dAR
     generator = model_cls(config)
-    if "safetensors" in config.experiment.generator_checkpoint:
-        load_model(generator, config.experiment.generator_checkpoint, device="cpu", strict=True)
+    if ".safetensors" in config.experiment.generator_checkpoint:
+        missing, unexpected = load_model(generator, config.experiment.generator_checkpoint, device="cpu")
+        print(missing)
+        print(unexpected)
     else:
         generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
     generator.eval()
@@ -132,7 +135,12 @@ def sample_fn(generator,
               num_sample_steps=8,
               device="cuda",
               return_tensor=False,
-              kv_cache=False):
+              kv_cache=False,
+              fix_orders=False,
+              use_annealed_temp=True,
+              maskgit_sampling=False,
+              top_k=None,
+              top_p=None):
     generator.eval()
     tokenizer.eval()
     if labels is None:
@@ -150,7 +158,13 @@ def sample_fn(generator,
         randomize_temperature=randomize_temperature,
         softmax_temperature_annealing=softmax_temperature_annealing,
         num_sample_steps=num_sample_steps,
-        kv_cache=kv_cache)
+        kv_cache=kv_cache,
+        fix_orders=fix_orders,
+        use_annealed_temp=use_annealed_temp,
+        maskgit_sampling=maskgit_sampling,
+        top_k=top_k,
+        top_p=top_p
+    )
     
     generated_image = tokenizer.decode_tokens(
         generated_tokens.view(generated_tokens.shape[0], -1)

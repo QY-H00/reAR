@@ -37,6 +37,7 @@ model:
         class_label_dropout: 0.1
         image_seq_len: ${model.vq_model.num_latent_tokens}
         condition_num_classes: 1000
+        rope_type: "none"
 
         # sampling hyper-params for RAR-B
         randomize_temperature: 1.0

@@ -119,15 +119,29 @@ def main():
             y = torch.from_numpy(all_classes[cur_idx * n: (cur_idx+1)*n]).to(device)
             cur_idx += 1
 
+            top_p = config.model.generator.top_p if hasattr(config.model.generator, "top_p") else None
+            top_k = config.model.generator.top_k if hasattr(config.model.generator, "top_k") else None
+            if top_p == "None":
+                top_p = None
+            if top_k == "None":
+                top_k = None
+
             samples = demo_util.sample_fn(
                 generator=generator,
                 tokenizer=tokenizer,
                 labels=y.long(),
+                num_sample_steps=config.model.generator.num_steps,
                 randomize_temperature=config.model.generator.randomize_temperature,
                 guidance_scale=config.model.generator.guidance_scale,
                 guidance_scale_pow=config.model.generator.guidance_scale_pow,
                 guidance_decay=config.model.generator.guidance_decay,
-                device=device
+                device=device,
+                fix_orders=config.model.generator.fix_orders if hasattr(config.model.generator, "fix_orders") else False,
+                use_annealed_temp=config.model.generator.use_annealed_temp if hasattr(config.model.generator, "use_annealed_temp") else True,
+                maskgit_sampling=config.model.generator.maskgit_sampling if hasattr(config.model.generator, "maskgit_sampling") else False,
+                top_k=top_k,
+                top_p=top_p,
+                kv_cache=True
             )
             # Save samples to disk as individual .png files
             for i, sample in enumerate(samples):
