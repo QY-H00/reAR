@@ -61,7 +61,7 @@ def main():
         print("Use SwanLab to log")
         tracker = SwanLabTracker(config.experiment.project, experiment_name=config.experiment.name)
 
-    ddp_kwargs = DistributedDataParallelKwargs()
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
 
     # from accelerate.utils import TorchDynamoPlugin
     # dynamo_plugin = TorchDynamoPlugin(
@@ -141,7 +141,7 @@ def main():
         ema_model.to(accelerator.device)
 
     # Compile the model to further accelerate
-    model = torch.compile(model)
+    # model = torch.compile(model, backend="aot_eager")
 
     total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
     num_batches = math.ceil(

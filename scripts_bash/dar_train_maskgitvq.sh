@@ -1,5 +1,5 @@
 config_name='dar_maskgitvq'
-tag="ema_rope_2d_diffusion_head"
+tag="ema_rope_2d_diffusion_head_again"
 
 nvidia-smi
 cd ~/dAR
@@ -20,7 +20,7 @@ end_lr=1e-5
 max_train_steps=250_000
 warmup_steps=62_500
 no_mask=False
-no_weight=True
+no_weight=False
 rope_type="2d"
 use_ema=True
 head_type="distributed"
@@ -36,14 +36,14 @@ accelerate launch \
     experiment.output_dir="temp/${config_name}_${tag}" \
     training.enable_swanlab=True \
     model.generator.hidden_size=768 \
-    model.generator.num_hidden_layers=19 \
+    model.generator.num_hidden_layers=24 \
     model.generator.num_attention_heads=16 \
     model.generator.intermediate_size=3072 \
     model.generator.rope_type=${rope_type} \
     model.generator.head_type=${head_type} \
     model.generator.k_tokens=${k_tokens} \
     training.use_ema=${use_ema} \
-    training.per_gpu_batch_size=256 \
+    training.per_gpu_batch_size=128 \
     training.gradient_accumulation_steps=1 \
     optimizer.params.learning_rate=${learning_rate} \
     lr_scheduler.params.learning_rate=${learning_rate} \

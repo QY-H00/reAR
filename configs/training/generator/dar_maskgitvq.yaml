@@ -30,7 +30,7 @@ model:
         image_seq_len: ${model.vq_model.num_latent_tokens}
         condition_num_classes: 1000
         rope_type: "none"
-
+        
         # sampling hyper-params for RAR-B
         randomize_temperature: 1.0
         guidance_scale: 16.0
@@ -38,6 +38,7 @@ model:
         guidance_decay: "power-cosine"
         num_steps: 256
         use_checkpoint: False # True to save memory
+        kv_cache: True
 
         randomness_anneal_start: 10000000 # Never touch
         randomness_anneal_end: 10000000 # Never touch

@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from modeling.modules import BaseModel
+from modeling.modules.dar_utils import shuffle, unshuffle, sliding_window_shift
 from modeling.modules.rope_attn import ShuffledRoPEAttention
 from functools import partial
 from timm.layers import Mlp
@@ -70,6 +71,7 @@ class DiffusionHead(nn.Module):
             self.adaLN_modulation = nn.Sequential(
                 nn.SiLU(), nn.Linear(dim, 2*dim)
             )
+            self.seq_len = seq_len
             self.k_tokens = k_tokens
 
             nn.init.constant_(self.adaLN_modulation[-1].weight, 0)
@@ -79,7 +81,7 @@ class DiffusionHead(nn.Module):
         else:
             raise ValueError(f"Invalid type: {type}")
         
-    def forward(self, x, orders):
+    def forward(self, x, orders, is_sampling=False, full_orders=None):
         # x: [B, seq_len, dim]
         # orders: [B, seq_len]
         
@@ -90,37 +92,31 @@ class DiffusionHead(nn.Module):
             B, seq_len, dim = x.shape
             # Shuffle pos_condition according to orders
             pos_condition_expanded = self.pos_condition.expand(B, -1, -1)
-            batch_indices = torch.arange(B, device=x.device).unsqueeze(1).expand(-1, seq_len - 1)
-            shuffled_pos_condition = pos_condition_expanded[batch_indices, orders]  # [B, seq_len - 1, dim]
-            pre_pos_condition = self.cls_pos_condition.expand(B, -1, -1)
-            shuffled_pos_condition = torch.cat([pre_pos_condition, shuffled_pos_condition], dim=1) # [B, seq_len, dim]
-            
-            # Compute scale and shift from shuffled position condition
+            if is_sampling:
+                shuffled_pos_condition = shuffle(pos_condition_expanded, full_orders)
+            else:
+                shuffled_pos_condition = shuffle(pos_condition_expanded, orders)
             scale_shift = self.adaLN_modulation(shuffled_pos_condition)  # [B, seq_len, 2*dim]
             scale, shift = scale_shift.chunk(2, dim=-1)  # Each: [B, seq_len, dim]
             
-            # Duplicate x for k_tokens times
             x_duplicated = x.unsqueeze(2).expand(B, seq_len, self.k_tokens, dim)  # [B, seq_len, k_tokens, dim]
             
-            # Modulate each token copy with scale and shift - MODIFIED LOGIC
-            # Create shifted scale pattern: scale[:, :, k, :] := scale[:, k:, :] with last element duplicated
-            B, seq_len, dim = scale.shape
+            scale_k = sliding_window_shift(scale, self.k_tokens)
+            shift_k = sliding_window_shift(shift, self.k_tokens)
+
+            if is_sampling:
+                if seq_len - 1 < orders.shape[1]:
+                    scale_k = scale_k[:, orders.shape[1] - seq_len + 1:orders.shape[1] + 1]
+                    shift_k = shift_k[:, orders.shape[1] - seq_len + 1:orders.shape[1] + 1]
+                else:
+                    scale_k = scale_k[:, :orders.shape[1] + 1]
+                    shift_k = shift_k[:, :orders.shape[1] + 1]
+
+            if not is_sampling:
+                scale_k = torch.cat([scale_k, torch.zeros_like(scale_k[:, -1:])], dim=1) # the last dummy prediction
+                shift_k = torch.cat([shift_k, torch.zeros_like(shift_k[:, -1:])], dim=1)
             
-            # Create shifting indices matrix: for each position i and shift k, get min(i+k, seq_len-1)
-            pos_range = torch.arange(seq_len, device=scale.device)  # [seq_len]
-            k_range = torch.arange(self.k_tokens, device=scale.device)  # [k_tokens]
-            
-            # Create meshgrid for all combinations of positions and k values
-            pos_grid, k_grid = torch.meshgrid(pos_range, k_range, indexing='ij')  # both [seq_len, k_tokens]
-            shift_indices = torch.clamp(pos_grid + k_grid, 0, seq_len - 1)  # [seq_len, k_tokens]
-            
-            # Now create scale_expanded and shift_expanded by proper indexing
-            # We want scale_expanded[b, i, k, d] = scale[b, shift_indices[i, k], d]
-            scale_expanded = scale[:, shift_indices, :]  # [B, seq_len, k_tokens, dim]
-            shift_expanded = shift[:, shift_indices, :]  # [B, seq_len, k_tokens, dim]
-            
-            # Apply modulation: x * (1 + scale) + shift
-            x_modulated = modulate(self.norm_final(x_duplicated), shift_expanded, scale_expanded)  # [B, seq_len, k_tokens, dim]
+            x_modulated = modulate(self.norm_final(x_duplicated), shift_k, scale_k)  # [B, seq_len, k_tokens, dim]
             
             # Forward through prediction head
             logits = self.prediction_head(x_modulated)  # [B, seq_len, k_tokens, vocab_size]
@@ -390,20 +386,6 @@ class dAR(BaseModel):
         shuffled_orders = torch.stack([torch.arange(self.image_seq_len, device=x.device) for _ in range(batch_size)])
         return shuffled_orders
 
-    def shuffle(self, x, orders):
-        batch_size, seq_len = x.shape[:2]
-        batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, orders.shape[1])
-        shuffled_x = x[batch_indices, orders]
-        return shuffled_x
-
-    def unshuffle(self, shuffled_x, orders):
-        # Unshuffle the tensor based on the original orders
-        batch_size, seq_len = shuffled_x.shape[:2]
-        batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, seq_len)
-        unshuffled_x = torch.zeros_like(shuffled_x)
-        unshuffled_x[batch_indices, orders] = shuffled_x
-        return unshuffled_x
-
     def preprocess_condition(self, condition, cond_drop_prob=0.0):
         # Set class condition to None condition
         drop_label_mask = torch.rand_like(condition, dtype=torch.float) < cond_drop_prob
@@ -423,7 +405,8 @@ class dAR(BaseModel):
     def forward_fn(self, input_ids, condition,
                    return_labels=False,
                    orders=None,
-                   is_sampling=False):
+                   is_sampling=False,
+                   full_orders=None):
         # Token space:
         #  [0, codebook_size - 1]                       : those are the learned quantized image tokens
         #  codebook_size                                : the mask token used to mask image tokens
@@ -432,7 +415,6 @@ class dAR(BaseModel):
 
         if orders is None:
             orders = self.get_raster_orders(input_ids)
-
         labels = input_ids.clone()
         # prepend condition token
         input_ids = torch.cat([condition.view(condition.shape[0], -1),
@@ -447,12 +429,12 @@ class dAR(BaseModel):
         pos_embed_prefix = pos_embed[:, :prefix]
         # shuffle pos embed
         # if orders.shape[1] > 0:
-        pos_embed_postfix = self.shuffle(pos_embed[:, prefix:prefix+self.image_seq_len], orders)
+        pos_embed_postfix = shuffle(pos_embed[:, prefix:prefix+self.image_seq_len], orders)
         if not is_sampling:
             # No need to shuffle labels for dAR
             # labels = self.shuffle(labels, orders)
             # randomized permutation: shuffle the embeddings of input image tokens
-            embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:], orders)], dim=1)
+            embeddings = torch.cat([embeddings[:, :1], shuffle(embeddings[:, 1:], orders)], dim=1)
 
         x = embeddings
         # prepend the cls token
@@ -490,8 +472,12 @@ class dAR(BaseModel):
             condition_token = condition_token[:, prefix - 1:]
         x = self.adaln_before_head(x, condition_token)
         
-        if self.kv_cache:
-            x = self.lm_head(x, orders[:, start_idx:])
+        if is_sampling:
+            assert full_orders is not None, "full_orders is required for sampling with kv cache"
+            if self.blocks[0].attn.k_cache:
+                x = self.lm_head(x, orders, is_sampling=True, full_orders=full_orders)
+            else:
+                x = self.lm_head(x, orders, is_sampling=True, full_orders=full_orders)
         else:
             x = self.lm_head(x, orders) # [B, image_seq_len, k_tokens, vocab_size]
         
@@ -545,6 +531,7 @@ class dAR(BaseModel):
                 annealed_temp = randomize_temperature
             # token_ratio = 1 - np.arccos(ratio) / (math.pi * 0.5)
             token_ratio = ratio
+            token_len = int(self.image_seq_len * token_ratio)
             
             if guidance_decay == "power-cosine":
                 guidance_scale_pow = torch.ones((1), device=device) * guidance_scale_pow
@@ -560,12 +547,12 @@ class dAR(BaseModel):
                     torch.cat([ids, ids], dim=0),
                     torch.cat([condition, self.get_none_condition(condition)], dim=0),
                     orders=torch.cat([current_orders, current_orders], dim=0),
-                    is_sampling=True)
+                    is_sampling=True, full_orders=torch.cat([orders, orders], dim=0))
                 cond_logits, uncond_logits = logits[:num_samples], logits[num_samples:]
                 logits = uncond_logits + (cond_logits - uncond_logits) * cfg_scale
             else:
                 logits = self.forward_fn(
-                    ids, condition, orders=current_orders, is_sampling=True
+                    ids, condition, orders=current_orders, is_sampling=True, full_orders=orders
                 ) # [B, len(ids), image_seq_len, vocab_size]
             
             logits = logits[:, -1] # [B, image_seq_len, vocab_size]
@@ -604,18 +591,15 @@ class dAR(BaseModel):
             else:
                 sampled_ids = self.add_gumbel_noise(logits, annealed_temp).argmax(dim=-1)
             
-            token_len = int(self.image_seq_len * token_ratio)
-            
             if not kwargs.get("maskgit_sampling", False):
                 if self.lm_head.type == "distributed":
+                    sampled_token_len = min(token_len - current_orders.shape[1], sampled_ids.shape[1])
                     current_orders = orders[:, :token_len]
-                    sampled_ids = sampled_ids[:, :min(token_len, sampled_ids.shape[1])]
+                    sampled_ids = sampled_ids[:, :sampled_token_len]
                 else:
                     current_orders = orders[:, :token_len]
                     next_token_indices = orders[:, ids.shape[1]:token_len]
-                    batch_indices = torch.arange(batch_size, device=device).unsqueeze(1)
-                    batch_indices = batch_indices.expand(-1, next_token_indices.shape[1])
-                    sampled_ids = sampled_ids[batch_indices, next_token_indices]
+                    sampled_ids = shuffle(sampled_ids, next_token_indices)
             else:
                 assert self.lm_head.type == "simple", "Maskgit sampling is only supported for simple head"
                 import numpy as np
@@ -634,9 +618,7 @@ class dAR(BaseModel):
                 sorted_confidence, sorted_indices = torch.sort(confidence, axis=-1, descending=True)
                 # Get the indices of the top num_new_tokens highest confidence values
                 next_token_indices = sorted_indices[:, :token_len - ids.shape[1]]  # [B, token_len - ids.shape[1]]
-                batch_indices = torch.arange(batch_size, device=device).unsqueeze(1)
-                batch_indices = batch_indices.expand(-1, next_token_indices.shape[1])
-                sampled_ids = sampled_ids[batch_indices, next_token_indices]
+                sampled_ids = shuffle(sampled_ids, next_token_indices)
                 current_orders = torch.cat([current_orders, next_token_indices], dim=1)
             
             sampled = sampled_ids.reshape(ids.shape[0], -1) # [B, N_t]
@@ -644,7 +626,7 @@ class dAR(BaseModel):
         
         orders = current_orders
         if not kwargs.get("fix_orders", False):
-            ids = self.unshuffle(ids, orders)
+            ids = unshuffle(ids, orders)
         self.disable_kv_cache()
         return ids
     

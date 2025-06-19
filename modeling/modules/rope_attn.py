@@ -156,7 +156,8 @@ def apply_rotary_emb_2d(
     freqs_cis = rearrange(freqs_cis, "b h w n d t -> b (h w) n d t")
     freqs_cis = shuffle(freqs_cis, orders)
     freqs_complex = torch.view_as_complex(freqs_cis.to(torch.float32))
-    if hw_q < hw:
+    freqs_complex = freqs_complex[:, :hw]
+    if hw_q <= hw:
         freqs_complex_q = freqs_complex[:, -hw_q:]
     else:
         freqs_complex_q = freqs_complex

@@ -15,7 +15,6 @@ def unshuffle(shuffled_x, orders):
 
 def sliding_window_shift(x, k_tokens):
     B, seq_len = x.shape[:2]
-    assert k_tokens <= seq_len, "k_tokens should be less than or equal to seq_len"
     i_indices = torch.arange(seq_len, device=x.device).unsqueeze(1)  # [seq_len, 1]
     k_indices = torch.arange(k_tokens, device=x.device).unsqueeze(0)  # [1, k_tokens]
     source_indices = i_indices + k_indices  # [seq_len, k_tokens]
