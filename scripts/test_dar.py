@@ -8,31 +8,34 @@ from data.imagenet_classes import imagenet_idx2classname
 import time
 
 if __name__ == "__main__":
-    guidance_scale = 4.0
+    guidance_scale = 16.25
     iters = 250000
     T = 1.0
     num_sample_steps = 256
-    guidance_scale_pow = 0.0
-    kv_cache = False
-    guidance_decay = "constant"
+    guidance_scale_pow = 2.75
+    kv_cache = True
+    guidance_decay = "power-cosine"
     use_annealed_temp = True
     fix_orders = False
     rope_type = "2d"
-    maskgit_sampling = True
-    top_k = 400
-    top_p = None
+    head_type="distributed"
+    maskgit_sampling = False
+    top_k = None
+    top_p = 0.95
+    inference_k_tokens = 32
 
     # download the maskgit-vq tokenizer
     # hf_hub_download(repo_id="fun-research/TiTok", filename=f"maskgit-vqgan-imagenet-f16-256.bin", local_dir="./")
 
     # load config
     config = demo_util.get_config("configs/training/generator/dar_maskgitvq.yaml")
-    config.experiment.generator_checkpoint = "/home/ubuntu/dAR/temp/dar_maskgitvq_ema_rope_2d_buggy/checkpoint-150000/ema_model/pytorch_model.bin"
+    config.experiment.generator_checkpoint = "/home/ubuntu/dAR/temp/dar_maskgitvq_ema_rope_2d_diffusion_head_tuned2/checkpoint-100000/ema_model/pytorch_model.bin"
     config.model.generator.hidden_size = 768
     config.model.generator.num_hidden_layers = 24
     config.model.generator.num_attention_heads = 16
     config.model.generator.intermediate_size = 3072
     config.model.generator.rope_type = rope_type
+    config.model.generator.head_type = head_type
 
     device = "cuda"
     # maskgit-vq as tokenizer
@@ -42,7 +45,7 @@ if __name__ == "__main__":
     generator.to(device)
 
     # Define seeds and classes to test
-    seeds = list(range(42, 50))  # Seeds 42 to 49 (8 seeds)
+    seeds = list(range(42, 44))  # Seeds 42 to 49 (8 seeds)
     sample_classes = [1, 7, 282, 604, 724, 179, 751, 404, 850, 123]  # 10 classes
     
     print(f"Generating images for {len(sample_classes)} classes across {len(seeds)} seeds")
@@ -87,7 +90,8 @@ if __name__ == "__main__":
             use_annealed_temp=use_annealed_temp,
             maskgit_sampling=maskgit_sampling,
             top_k=top_k,
-            top_p=top_p
+            top_p=top_p,
+            inference_k_tokens=inference_k_tokens
         )
         end_time = time.time()
         print(f"  Time: {end_time - start_time:.2f}s")
@@ -100,7 +104,7 @@ if __name__ == "__main__":
     print(f"\nTotal generation time: {total_end_time - total_start_time:.2f} seconds")
     
     # Create save dir
-    os.makedirs("assets/dar_maskgitvq", exist_ok=True)
+    os.makedirs("temp/vis_temp_maskgitvq", exist_ok=True)
     
     # Create grid layout: rows = classes, columns = seeds
     num_classes = len(sample_classes)
@@ -152,7 +156,7 @@ if __name__ == "__main__":
             grid_image.paste(img, (x, y))
     
     # Save the grid image
-    filename = f"temp/vis_temp/multi_seed_grid_steps{num_sample_steps}_scale{guidance_scale}_T{T}_iters{iters}{'_kv_cache' if kv_cache else ''}_{guidance_decay}{'_fix_orders' if fix_orders else ''}_{rope_type}{'_annealed_temp' if use_annealed_temp else ''}{'_maskgit_sampling' if maskgit_sampling else ''}{'_top_k' if top_k is not None else ''}{'_top_p' if top_p is not None else ''}.png"
+    filename = f"temp/vis_temp_maskgitvq/multi_seed_grid_steps{num_sample_steps}_scale{guidance_scale}_T{T}_iters{iters}{'_kv_cache' if kv_cache else ''}_{guidance_decay}{'_fix_orders' if fix_orders else ''}_{rope_type}{'_annealed_temp' if use_annealed_temp else ''}{'_maskgit_sampling' if maskgit_sampling else ''}{'_top_k' if top_k is not None else ''}{'_top_p' if top_p is not None else ''}.png"
     grid_image.save(filename)
     
     print(f"\nGrid image saved as: {filename}")

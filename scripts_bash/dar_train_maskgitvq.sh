@@ -1,5 +1,5 @@
 config_name='dar_maskgitvq'
-tag="ema_rope_2d_diffusion_head_again"
+tag="ema_rope_2d_dicube_head_tuned1"
 
 nvidia-smi
 cd ~/dAR
@@ -16,15 +16,17 @@ export NCCL_SOCKET_IFNAME=bond0
 export NCCL_DEBUG=INFO
 
 learning_rate=4e-4
-end_lr=1e-5
-max_train_steps=250_000
-warmup_steps=62_500
+end_lr=4e-4
+max_train_steps=500_000
+warmup_steps=125_000
 no_mask=False
 no_weight=False
 rope_type="2d"
 use_ema=True
 head_type="distributed"
 k_tokens=4
+mlp_size=1024
+mlp_depth=3
 
 accelerate launch \
     --num_machines=1 --num_processes=8 --machine_rank=0 \
@@ -42,6 +44,8 @@ accelerate launch \
     model.generator.rope_type=${rope_type} \
     model.generator.head_type=${head_type} \
     model.generator.k_tokens=${k_tokens} \
+    model.generator.mlp_size=${mlp_size} \
+    model.generator.mlp_depth=${mlp_depth} \
     training.use_ema=${use_ema} \
     training.per_gpu_batch_size=128 \
     training.gradient_accumulation_steps=1 \

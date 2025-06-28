@@ -19,6 +19,8 @@ export NCCL_IB_DISABLE=0
 export NCCL_SOCKET_IFNAME=bond0 
 export NCCL_DEBUG=INFO
 
+export TORCHDYNAMO_VERBOSE=1
+
 # accelerate launch \
 accelerate launch \
     --num_machines=1 --num_processes=8 --machine_rank=0 \
@@ -30,12 +32,14 @@ accelerate launch \
     experiment.output_dir="temp/${config_name}_${tag}" \
     training.enable_swanlab=True \
     model.generator.hidden_size=768 \
-    model.generator.num_hidden_layers=28 \
+    model.generator.num_hidden_layers=24 \
     model.generator.num_attention_heads=16 \
-    model.generator.intermediate_size=1024 \
-    model.generator.rope_type="2d" \
+    model.generator.intermediate_size=3072 \
+    model.generator.rope_type="none" \
     model.generator.head_type="distributed" \
-    model.generator.k_tokens=4 \
+    model.generator.k_tokens=8 \
+    model.generator.mlp_size=1024 \
+    model.generator.mlp_depth=3 \
     training.per_gpu_batch_size=128 \
     training.gradient_accumulation_steps=1 \
     lr_scheduler.params.learning_rate=1e-4 \
@@ -47,7 +51,7 @@ accelerate launch \
     \
     experiment.save_every=1000 \
     experiment.eval_every=1000 \
-    experiment.generate_every=50 \
+    experiment.generate_every=200 \
     experiment.log_every=100 \
     \
     losses.no_mask=False \

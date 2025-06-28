@@ -2,6 +2,7 @@ import torch
 from typing import Optional, Tuple
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.attention import SDPBackend
 from einops import rearrange
 
 # ------------------------------------------------------
@@ -137,7 +138,6 @@ def apply_rotary_emb_2d(
     assert freqs_cis.shape[1] >= w, f"freqs_cis.shape[1] = {freqs_cis.shape[1]} must be >= w = {w}"
     freqs_cis_h = freqs_cis.shape[0]
     freqs_cis_w = freqs_cis.shape[1]
-    freqs_cis = freqs_cis[:freqs_cis_h, :freqs_cis_w]  # shape [h, w, head_dim//2, 2]
 
     # Expand to shape [1, h, w, 1, head_dim//2, 2]
     freqs_cis = freqs_cis.unsqueeze(2).unsqueeze(0)
@@ -156,7 +156,6 @@ def apply_rotary_emb_2d(
     freqs_cis = rearrange(freqs_cis, "b h w n d t -> b (h w) n d t")
     freqs_cis = shuffle(freqs_cis, orders)
     freqs_complex = torch.view_as_complex(freqs_cis.to(torch.float32))
-    freqs_complex = freqs_complex[:, :hw]
     if hw_q <= hw:
         freqs_complex_q = freqs_complex[:, -hw_q:]
     else:
@@ -232,6 +231,7 @@ class ShuffledRoPEAttention(nn.Module):
         self.k_cache = None
         self.v_cache = None
 
+    @torch.compile
     def forward(self, x: torch.Tensor, orders: torch.Tensor, attn_mask=None) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
@@ -256,9 +256,9 @@ class ShuffledRoPEAttention(nn.Module):
         if self.rope_type not in ['1d', '2d']:
             raise ValueError(f"Invalid rope_type: {self.rope_type}")
         elif self.rope_type == '1d' and k.shape[2] > self.prefix:
-            if self.kv_cache: # during training
+            if self.kv_cache: 
                 q_1d = q
-            else:
+            else: # during training
                 q_1d = q[:, :, self.prefix:]
             k_1d = k[:, :, self.prefix:]
             q_1d, k_1d = apply_rotary_emb(q_1d, k_1d, self.freqs_cis, orders)
@@ -268,9 +268,9 @@ class ShuffledRoPEAttention(nn.Module):
                 q = torch.cat([q[:, :, :self.prefix], q_1d], dim=2)
             k = torch.cat([k[:, :, :self.prefix], k_1d], dim=2)
         elif self.rope_type == '2d' and k.shape[2] > self.prefix:
-            if self.kv_cache: # during training
+            if self.kv_cache:
                 q_2d = q
-            else:
+            else: # during training
                 q_2d = q[:, :, self.prefix:]
             k_2d = k[:, :, self.prefix:]
             q_2d, k_2d = apply_rotary_emb_2d(q_2d, k_2d, self.freqs_cis_2d, orders)
@@ -281,7 +281,7 @@ class ShuffledRoPEAttention(nn.Module):
             k = torch.cat([k[:, :, :self.prefix], k_2d], dim=2)
         else:
             pass
-
+        
         x = F.scaled_dot_product_attention(
             q, k, v, attn_mask=attn_mask,
             dropout_p=self.attn_drop.p if self.training else 0.,

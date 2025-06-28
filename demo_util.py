@@ -140,7 +140,8 @@ def sample_fn(generator,
               use_annealed_temp=True,
               maskgit_sampling=False,
               top_k=None,
-              top_p=None):
+              top_p=None,
+              inference_k_tokens=None):
     generator.eval()
     tokenizer.eval()
     if labels is None:
@@ -163,7 +164,8 @@ def sample_fn(generator,
         use_annealed_temp=use_annealed_temp,
         maskgit_sampling=maskgit_sampling,
         top_k=top_k,
-        top_p=top_p
+        top_p=top_p,
+        inference_k_tokens=inference_k_tokens
     )
     
     generated_image = tokenizer.decode_tokens(

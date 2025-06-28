@@ -176,10 +176,13 @@ def create_model_and_loss_module(config, logger, accelerator,
                 torch.randint(0, config.model.vq_model.codebook_size, input_size),
                 torch.ones(1, dtype=int)
             ]
-            model_summary_str = summary(
-                model, input_data=input_data, depth=7,
-                col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"))
-            logger.info(model_summary_str)
+            try:
+                model_summary_str = summary(
+                    model, input_data=input_data, depth=7,
+                    col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"))
+                logger.info(model_summary_str)
+            except Exception as e:
+                logger.info(f"Failed to print model summary: {e}")
         else:
             raise NotImplementedError
 

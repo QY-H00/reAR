@@ -527,15 +527,15 @@ class dARLoss(torch.nn.Module):
     def forward_fn_distributed(self, logits: torch.Tensor, labels: torch.Tensor, orders: torch.Tensor) -> Tuple[torch.Tensor, Mapping[Text, torch.Tensor]]:
         B, N_with_cls, k_tokens, vocab_size = logits.shape
         N = N_with_cls - 1
-        shift_logits = logits[..., :-1, :, :].view(B, N*k_tokens, vocab_size).permute(0, 2, 1).contiguous() # [B, N, k_tokens, vocab_size]
+        shift_logits = logits[..., :-1, :, :].view(B, N*k_tokens, vocab_size).permute(0, 2, 1).contiguous() # [B, vocab_size, N * k_tokens]
         shuffled_labels = shuffle(labels, orders) # [B, N]
-        shuffled_next_k_labels = sliding_window_shift(shuffled_labels, k_tokens).view(B, N * k_tokens).contiguous().to(shift_logits.device) # [B, N, k_tokens]
+        shuffled_next_k_labels = sliding_window_shift(shuffled_labels, k_tokens)
+        shuffled_next_k_labels = shuffled_next_k_labels.reshape(B, N * k_tokens).contiguous().to(shift_logits.device) # [B, N * k_tokens]
         loss = self.criterion(shift_logits, shuffled_next_k_labels) # [B, N*k_tokens]
         if not self.no_mask:
             loss = loss.view(B, N, k_tokens)
-            loss = loss * self.prediction_mask.to(loss.device)
-            num_elements = self.prediction_mask.sum()
-            loss = loss.sum() / num_elements
+            loss = loss * (self.prediction_mask.to(loss.device)/ (self.prediction_mask.sum()))
+            loss = loss.sum() 
         else:
             loss = loss.mean()
 
