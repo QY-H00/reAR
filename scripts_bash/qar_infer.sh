@@ -6,4 +6,4 @@ conda activate dar
 
 export PYTHONPATH=$(pwd)
 
-python scripts/test_dar.py
+python scripts/test_qar.py

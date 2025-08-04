@@ -191,6 +191,7 @@ guided-diffusion/
 ours*
 ours_steps32_scale3.0_temperature1.0.npz
 evaluator/c2i_evaluator_torch.py
+swanlog/
 
 # latex
 *.aux

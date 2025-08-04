@@ -34,6 +34,7 @@ from utils.train_utils import (
 
 from demo_util import get_tokenizer
 
+
 def main():
     workspace = os.environ.get('WORKSPACE', '')
     torch.hub.set_dir(workspace + "/models/hub")
@@ -62,6 +63,14 @@ def main():
 
     ddp_kwargs = DistributedDataParallelKwargs()
 
+    # from accelerate.utils import TorchDynamoPlugin
+    # dynamo_plugin = TorchDynamoPlugin(
+    #     backend="inductor",  # Options: "inductor", "aot_eager", "aot_nvfuser", etc.
+    #     mode="default",      # Options: "default", "reduce-overhead", "max-autotune"
+    #     fullgraph=True,
+    #     dynamic=False
+    # )
+
     accelerator = Accelerator(
         gradient_accumulation_steps=config.training.gradient_accumulation_steps,
         mixed_precision=config.training.mixed_precision,
@@ -69,20 +78,26 @@ def main():
         project_dir=config.experiment.logging_dir,
         split_batches=False,
         kwargs_handlers=[ddp_kwargs],
+        # dynamo_plugin=dynamo_plugin
     )
 
-    logger = setup_logger(name="PAR", log_level="INFO",
+    logger = setup_logger(name="QAR", log_level="INFO",
      output_file=f"{output_dir}/log{accelerator.process_index}.txt")
 
-    # We need to initialize the trackers we use, and also store our configuration.
-    # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
         if config.training.enable_swanlab:
             tracker.start()
-
+        
         accelerator.init_trackers(
             project_name=config.experiment.project,
             config=OmegaConf.to_container(config, resolve=True),
+            # init_kwargs={
+            #     "wandb": {
+            #         "entity": config.experiment.entity,
+            #         "name": config.experiment.name,
+            #         "id": config.experiment.name,
+            #     }
+            # }
         )
         config_path = Path(output_dir) / "config.yaml"
         logger.info(f"Saving config to {config_path}")
@@ -93,19 +108,14 @@ def main():
     if config.training.seed is not None:
         set_seed(config.training.seed, device_specific=True)
 
-    # if accelerator.local_process_index == 0:
-    #     # download the maskgit-vq tokenizer weight
-    #     from huggingface_hub import hf_hub_download
-    #     hf_hub_download(repo_id="fun-research/TiTok", filename=f"{config.model.vq_model.pretrained_tokenizer_weight}", local_dir="./")
-    #     hf_hub_download(repo_id="yucornetto/RAR", filename=f"{config.dataset.params.pretokenization}", local_dir="./")
     accelerator.wait_for_everyone()
 
-    # get maskgit-vq tokenizer
+    # Get the tokenizer from config: can be titok / maskgit-vq / maskgit-vq+
     tokenizer = get_tokenizer(config)
     tokenizer.to(accelerator.device)
 
     model, ema_model, loss_module = create_model_and_loss_module(
-        config, logger, accelerator, model_type="rar")
+        config, logger, accelerator, model_type="qar")
 
     optimizer, _ = create_optimizer(config, logger, model, loss_module,
                                     need_discrminator=False)
@@ -118,6 +128,7 @@ def main():
     # Prepare everything with accelerator.
     logger.info("Preparing model, optimizer and dataloaders")
     if config.dataset.params.get("pretokenization", ""):
+        logger.info("Using pretokenized dataset!!")
         model, optimizer, lr_scheduler, train_dataloader = accelerator.prepare(
             model, optimizer, lr_scheduler, train_dataloader
         )
@@ -128,6 +139,9 @@ def main():
         )
     if config.training.use_ema:
         ema_model.to(accelerator.device)
+
+    # Compile the model to further accelerate
+    # model = torch.compile(model, backend='max-autotune')
 
     total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
     num_batches = math.ceil(
@@ -157,7 +171,7 @@ def main():
         strict=True)
 
     for current_epoch in range(first_epoch, num_train_epochs):
-        accelerator.print(f"Epoch {current_epoch * 10}/{num_train_epochs-1} started.") # the pretokenized file includes 10 epochs
+        accelerator.print(f"Epoch {current_epoch}/{num_train_epochs-1} started.")
         global_step = train_one_epoch_generator(config, logger, accelerator,
                             model, ema_model, loss_module,
                             optimizer,
@@ -165,16 +179,11 @@ def main():
                             train_dataloader,
                             tokenizer,
                             global_step,
-                            model_type="rar")
+                            model_type="qar")
         # Stop training if max steps is reached.
         if global_step >= config.training.max_train_steps:
             accelerator.print(
                 f"Finishing training: Global step is >= Max train steps: {global_step} >= {config.training.max_train_steps}"
-            )
-            break
-        if global_step >= config.training.get("stop_steps", config.training.max_train_steps):
-            accelerator.print(
-                f"Reach stop steps: Global step is >= Stop steps: {global_step} >= {config.training.get('stop_steps', config.training.max_train_steps)}"
             )
             break
 

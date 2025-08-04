@@ -300,7 +300,7 @@ class dAR(BaseModel):
             seq_len=image_seq_len,
             depth=config.model.generator.get("mlp_depth", 3),
             vocab_size=target_codebook_size,
-            k_tokens=config.model.generator.get("k_tokens", image_seq_len),
+            k_tokens=config.model.generator.get("k_tokens", 1),
             type=config.model.generator.get("head_type", "simple")
         )
         
@@ -346,7 +346,10 @@ class dAR(BaseModel):
     
     def set_random_ratio(self, new_ratio):
         # Always set to 1.0 for dAR (different from RAR)
-        self.random_ratio = 1.0
+        if self.config.model.generator.get("fix_orders", False):
+            self.random_ratio = 0.0
+        else:
+            self.random_ratio = 1.0
 
     def get_raster_orders(self, x):
         batch_size = x.shape[0]
@@ -479,7 +482,9 @@ class dAR(BaseModel):
         if kv_cache:
             self.enable_kv_cache()
 
-        if kwargs.get("fix_orders", False):
+        fix_orders = kwargs.get("fix_orders", False) or self.config.model.generator.get("fix_orders", False)
+
+        if fix_orders:
             self.random_ratio = 0.0
         else:
             self.random_ratio = 1.0
@@ -509,6 +514,7 @@ class dAR(BaseModel):
                 cfg_scale = guidance_scale
             
             if guidance_scale != 0:
+                # print(f"current_orders[0]: {current_orders[0]}")
                 logits = self.forward_fn(
                     torch.cat([ids, ids], dim=0),
                     torch.cat([condition, self.get_none_condition(condition)], dim=0),
@@ -521,7 +527,6 @@ class dAR(BaseModel):
                     ids, condition, orders=current_orders, is_sampling=True, full_orders=orders, inference_k_tokens=inference_k_tokens
                 ) # [B, len(ids), inference_k_tokens, vocab_size]
             
-            print(logits.shape)
             logits = logits[:, -1] # [B, inference_k_tokens, vocab_size]
             batch_size = logits.shape[0]
             
@@ -564,7 +569,8 @@ class dAR(BaseModel):
                 import numpy as np
                 import math
                 if self.lm_head.type == "distributed":
-                    token_len = int(np.floor(self.image_seq_len * (1 - np.arccos(ratio) / (math.pi * 0.5))))
+                    # token_len = int(np.floor(self.image_seq_len * (1 - np.arccos(ratio) / (math.pi * 0.5))))
+                    token_len = int(np.floor(self.image_seq_len * (ratio)))
                     token_len = max(token_len, 1 + ids.shape[1])
                     sampled_token_len = min(token_len - current_orders.shape[1], sampled_ids.shape[1])
                     current_orders = orders[:, :token_len]
@@ -608,12 +614,13 @@ class dAR(BaseModel):
                     next_token_indices = sorted_indices[:, :token_len - ids.shape[1]]  # [B, token_len - ids.shape[1]]
                     sampled_ids = shuffle(sampled_ids, next_token_indices)
                     current_orders = torch.cat([current_orders, next_token_indices], dim=1)
-            
+                
             sampled = sampled_ids.reshape(ids.shape[0], -1) # [B, N_t]
             ids = torch.cat((ids, sampled), dim = -1)
+            print(f"ids[0]: {ids[0]}")
         
         orders = current_orders
-        if not kwargs.get("fix_orders", False):
+        if not fix_orders:
             ids = unshuffle(ids, orders)
         self.disable_kv_cache()
         return ids

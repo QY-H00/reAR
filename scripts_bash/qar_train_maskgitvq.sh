@@ -2,8 +2,13 @@
 #PBS -S /bin/bash
 #PBS -l select=1:ncpus=48:mem=360gb:ngpus=8:host=cvml10
 
-config_name='dar_maskgitvq'
-tag="dryrun_test"
+config_name='qar_maskgitvq'
+tag="v1_02"
+fix_orders=False
+warmup_steps=10_000
+max_train_steps=250_000
+lr=2e-4
+end_lr=1e-5
 
 nvidia-smi
 cd ~/dAR
@@ -25,33 +30,24 @@ export TORCHDYNAMO_VERBOSE=1
 accelerate launch \
     --num_machines=1 --num_processes=8 --machine_rank=0 \
     --main_process_ip=127.0.0.1 --main_process_port=9999 --same_network \
-    scripts/train_dar.py config="configs/training/generator/${config_name}.yaml" \
-    experiment.project="dar" \
+    scripts/train_qar.py config="configs/training/generator/${config_name}.yaml" \
+    experiment.project="qar" \
     experiment.name="${config_name}_${tag}" \
     experiment.entity="hodavid538" \
     experiment.output_dir="temp/${config_name}_${tag}" \
     training.enable_swanlab=True \
     model.generator.hidden_size=768 \
-    model.generator.num_hidden_layers=24 \
+    model.generator.num_hidden_layers=20 \
     model.generator.num_attention_heads=16 \
     model.generator.intermediate_size=3072 \
-    model.generator.rope_type="none" \
-    model.generator.head_type="distributed" \
-    model.generator.k_tokens=8 \
-    model.generator.mlp_size=1024 \
-    model.generator.mlp_depth=3 \
-    training.per_gpu_batch_size=128 \
+    model.generator.fix_orders=${fix_orders} \
+    training.per_gpu_batch_size=256 \
     training.gradient_accumulation_steps=1 \
-    lr_scheduler.params.learning_rate=1e-4 \
-    lr_scheduler.params.warmup_steps=62_500 \
-    training.max_train_steps=250_000 \
-    training.use_ema=True \
+    optimizer.params.learning_rate=${lr} \
+    lr_scheduler.params.learning_rate=${lr} \
+    lr_scheduler.params.warmup_steps=${warmup_steps} \
+    lr_scheduler.params.end_lr=${end_lr} \
+    training.max_train_steps=${max_train_steps} \
+    training.use_ema=False \
     dataset.params.train_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-train-{000000..000320}.tar" \
     dataset.params.eval_shards_path_or_url="/mnt/rdata8/imagenet_wds/imagenet-val-{000000..000049}.tar" \
-    \
-    experiment.save_every=1000 \
-    experiment.eval_every=1000 \
-    experiment.generate_every=200 \
-    experiment.log_every=100 \
-    \
-    losses.no_mask=False \

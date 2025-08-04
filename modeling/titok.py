@@ -71,6 +71,12 @@ class MaskgitVQ(nn.Module):
         rec_images = self.decoder(quantized_states)
         rec_images = torch.clamp(rec_images, 0.0, 1.0)
         return rec_images.detach()
+
+    @torch.no_grad()
+    def get_quantized_states(self, codes):
+        states_2d = self.quantize.get_codebook_entry(codes)
+        states_1d = rearrange(states_2d, 'b c h w -> b (h w) c')
+        return states_1d
     
     @torch.no_grad()
     def decode_tokens(self, codes):

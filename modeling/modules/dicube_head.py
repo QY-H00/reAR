@@ -48,7 +48,7 @@ class DiCubeHead(nn.Module):
             k_tokens = self.k_tokens
         B, seq_len, hidden_size = x.shape
         full_orders = sliding_window_shift(full_orders, k_tokens, add_offset=0) # [B, seq_len, k_tokens]
-        orders = full_orders[:, orders.shape[1] - x.shape[1]+1:orders.shape[1]+1] # corresponding to the predicted targets of current x
+        orders = full_orders[:, max(0,orders.shape[1]-x.shape[1]+1):orders.shape[1]+1] # corresponding to the predicted targets of current x
         x = x.unsqueeze(2).expand(B, seq_len, k_tokens, hidden_size)  # [B, seq_len, k_tokens, hidden_size]
         c = c.unsqueeze(2).expand(B, seq_len, k_tokens, hidden_size)  # [B, seq_len, k_tokens, hidden_size]
         result = self.prediction_head(x, orders, c)
@@ -315,7 +315,7 @@ class SimpleMLPAdaLN(nn.Module):
         nn.init.constant_(self.final_layer.linear.weight, 0)
         nn.init.constant_(self.final_layer.linear.bias, 0)
 
-    @torch.compile
+    # @torch.compile
     def forward(self, x, orders, c):
         """
         Apply the model to an input batch.
@@ -327,7 +327,6 @@ class SimpleMLPAdaLN(nn.Module):
         x = self.input_proj(x)
         orders = self.pos_embed(orders)
         c = self.cond_embed(c)
-
         y = orders + c
 
         if self.grad_checkpointing and not torch.jit.is_scripting():

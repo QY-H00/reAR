@@ -24,6 +24,7 @@ from modeling.titok import TiTok, MaskgitVQ
 from modeling.maskgit import ImageBert, UViTBert
 from modeling.rar import RAR
 from modeling.dar import dAR
+from modeling.qar import QAR
 from modeling.vqplus import VQPlus # VQGAN+ From MaskBit
 
 
@@ -112,6 +113,19 @@ def get_rar_generator(config):
 
 def get_dar_generator(config):
     model_cls = dAR
+    generator = model_cls(config)
+    if ".safetensors" in config.experiment.generator_checkpoint:
+        missing, unexpected = load_model(generator, config.experiment.generator_checkpoint, device="cpu")
+        print(missing)
+        print(unexpected)
+    else:
+        generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
+    generator.eval()
+    generator.requires_grad_(False)
+    return generator
+
+def get_qar_generator(config):
+    model_cls = QAR
     generator = model_cls(config)
     if ".safetensors" in config.experiment.generator_checkpoint:
         missing, unexpected = load_model(generator, config.experiment.generator_checkpoint, device="cpu")

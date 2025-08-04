@@ -30,11 +30,12 @@ from torch.utils.data import DataLoader
 from omegaconf import OmegaConf
 from torch.optim import AdamW
 from utils.lr_schedulers import get_scheduler
-from modeling.modules import EMAModel, ReconstructionLoss_Stage1, ReconstructionLoss_Stage2, MLMLoss, ARLoss, dARLoss
+from modeling.modules import EMAModel, ReconstructionLoss_Stage1, ReconstructionLoss_Stage2, MLMLoss, ARLoss, dARLoss, QARLoss
 from modeling.titok import TiTok, MaskgitVQ
 from modeling.maskgit import ImageBert, UViTBert
 from modeling.rar import RAR
 from modeling.dar import dAR
+from modeling.qar import QAR
 from evaluator import VQGANEvaluator
 from demo_util import sample_fn
 
@@ -121,6 +122,9 @@ def create_model_and_loss_module(config, logger, accelerator,
     elif model_type == "dar":
         model_cls = dAR
         loss_cls = dARLoss
+    elif model_type == "qar":
+        model_cls = QAR
+        loss_cls = QARLoss
     else:
         raise ValueError(f"Unsupported model_type {model_type}")
     model = model_cls(config)
@@ -170,7 +174,7 @@ def create_model_and_loss_module(config, logger, accelerator,
             model_summary_str = summary(model, input_size=input_size, depth=5,
             col_names=("input_size", "output_size", "num_params", "params_percent", "kernel_size", "mult_adds"))
             logger.info(model_summary_str)
-        elif model_type in ["maskgit", "rar", "dar"]:
+        elif model_type in ["maskgit", "rar", "dar", "qar"]:
             input_size = (1, config.model.vq_model.num_latent_tokens)
             input_data = [
                 torch.randint(0, config.model.vq_model.codebook_size, input_size),
@@ -688,7 +692,7 @@ def train_one_epoch_generator(
             # Randomly masking out input tokens.
             masked_tokens, masks, mask_ratios = unwrap_model.masking_input_tokens(
                 input_tokens)
-        elif model_type == "rar" or model_type == "dar":
+        elif model_type == "rar" or model_type == "dar" or model_type == "qar":
             unwrap_model.set_random_ratio(get_rar_random_ratio(config, global_step))
         else:
             raise NotImplementedError
@@ -703,14 +707,21 @@ def train_one_epoch_generator(
                 condition = unwrap_model.preprocess_condition(
                     conditions, cond_drop_prob=config.model.generator.class_label_dropout
                 )
-                logits, labels = model(input_tokens, condition, return_labels=True)
-                loss, loss_dict = loss_module(logits, labels)
+                logits, labels, encode_z, decode_z, perturb_mask = model(input_tokens, condition, return_labels=True)
+                quantize_states = tokenizer.get_quantized_states(input_tokens)
+                loss, loss_dict = loss_module(logits, labels, encode_z, decode_z, quantize_states, perturb_mask)
             elif model_type == "dar":
                 condition = unwrap_model.preprocess_condition(
                     conditions, cond_drop_prob=config.model.generator.class_label_dropout
                 )
                 logits, labels, orders = model(input_tokens, condition, return_labels=True)
                 loss, loss_dict = loss_module(logits, labels, orders=orders)
+            elif model_type == "qar":
+                condition = unwrap_model.preprocess_condition(
+                    conditions, cond_drop_prob=config.model.generator.class_label_dropout
+                )
+                logits, labels, masks, mask_ratios = model(input_tokens, condition, return_labels=True)
+                loss, loss_dict= loss_module(logits, labels, weights=masks)
             # Gather the losses across all processes for logging.
             gen_logs = {}
             for k, v in loss_dict.items():
@@ -756,12 +767,13 @@ def train_one_epoch_generator(
                 logs = {
                     "lr": lr,
                     "lr/generator": lr,
+                    "lr/random_ratio": get_rar_random_ratio(config, global_step),
                     "samples/sec/gpu": samples_per_second_per_gpu,
                     "time/data_time": data_time_meter.val,
                     "time/batch_time": batch_time_meter.val,
                 }
                 logs.update(gen_logs)
-                accelerator.log(logs, step=global_step + 1)
+                accelerator.log(logs, step=int(global_step + 1))
 
                 # Reset batch / data time meters per log window.
                 batch_time_meter.reset()
@@ -770,7 +782,7 @@ def train_one_epoch_generator(
             # Save model checkpoint.
             if (global_step + 1) % config.experiment.save_every == 0:
                 save_path = save_checkpoint(
-                    model, config.experiment.output_dir, accelerator, global_step + 1, logger=logger)
+                    model, config.experiment.output_dir, accelerator, int(global_step + 1), logger=logger)
                 # Wait for everyone to save their checkpoint.
                 accelerator.wait_for_everyone()
 
@@ -785,7 +797,7 @@ def train_one_epoch_generator(
                     model,
                     tokenizer,
                     accelerator,
-                    global_step + 1,
+                    int(global_step + 1),
                     config.experiment.output_dir,
                     logger=logger,
                     config=config
@@ -803,6 +815,11 @@ def train_one_epoch_generator(
                 )
                 break
 
+            if global_step >= config.training.get("stop_steps", config.training.max_train_steps):
+                accelerator.print(
+                    f"Finishing training: Global step is >= Stop steps: {global_step} >= {config.training.get('stop_steps', config.training.max_train_steps)}"
+                )
+                break
 
     return global_step
 
@@ -924,20 +941,20 @@ def generate_images(model, tokenizer, accelerator,
     if config.training.enable_swanlab:
         accelerator.get_tracker("swanlab").log_images(
             {"Train Generated": [images_for_saving]},
-            step=global_step
+            step=int(global_step)
         )
     elif config.training.enable_wandb:
         accelerator.get_tracker("wandb").log_images(
-            {"Train Generated": [images_for_saving]}, step=global_step
+            {"Train Generated": [images_for_saving]}, step=int(global_step)
         )
     else:
         accelerator.get_tracker("tensorboard").log_images(
-            {"Train Generated": images_for_logging}, step=global_step
+            {"Train Generated": images_for_logging}, step=int(global_step)
         )
     # Log locally.
     root = Path(output_dir) / "train_generated_images"
     os.makedirs(root, exist_ok=True)
-    filename = f"{global_step:08}_s-generated.png"
+    filename = f"{int(global_step):08}_s-generated.png"
     path = os.path.join(root, filename)
     images_for_saving.save(path)
 
@@ -946,6 +963,7 @@ def generate_images(model, tokenizer, accelerator,
 
 
 def save_checkpoint(model, output_dir, accelerator, global_step, logger) -> Path:
+    global_step = int(global_step)
     save_path = Path(output_dir) / f"checkpoint-{global_step}"
 
     state_dict = accelerator.get_state_dict(model)
@@ -980,4 +998,4 @@ def log_grad_norm(model, accelerator, global_step):
         if param.grad is not None:
             grads = param.grad.detach().data
             grad_norm = (grads.norm(p=2) / grads.numel()).item()
-            accelerator.log({"grad_norm/" + name: grad_norm}, step=global_step)
+            accelerator.log({"grad_norm/" + name: grad_norm}, step=int(global_step))
