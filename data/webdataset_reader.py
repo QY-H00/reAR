@@ -1,9 +1,4 @@
-"""This file contains the definition of data loader using webdataset.
-
-This file may have been modified by Bytedance Ltd. and/or its affiliates (“Bytedance's Modifications”).
-All Bytedance's Modifications are Copyright (year) Bytedance Ltd. and/or its affiliates. 
-
-Reference:
+"""Adapted from:
     https://github.com/mlfoundations/open_clip/blob/main/src/training/data.py
     https://github.com/huggingface/open-muse/blob/main/training/data.py
 """

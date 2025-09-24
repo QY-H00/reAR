@@ -1,22 +1,6 @@
-"""This file contains the model definition of TiTok.
-
-Copyright (2024) Bytedance Ltd. and/or its affiliates
-
-Licensed under the Apache License, Version 2.0 (the "License"); 
-you may not use this file except in compliance with the License. 
-You may obtain a copy of the License at 
-
-    http://www.apache.org/licenses/LICENSE-2.0 
-
-Unless required by applicable law or agreed to in writing, software 
-distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-See the License for the specific language governing permissions and 
-limitations under the License.
-
-Reference: 
-    https://github.com/mlfoundations/open_clip/blob/main/src/open_clip/transformer.py
-    https://github.com/facebookresearch/DiT/blob/main/models.py
+"""Adapted from:
+    https://github.com/bytedance/1d-tokenizer/blob/main/modeling/rar.py
+    https://github.com/sihyun-yu/REPA/blob/main/models/mmdit.py
 """
 
 
@@ -26,11 +10,7 @@ import torch.nn.functional as F
 from modeling.modules import BaseModel
 from functools import partial
 from timm.layers import Mlp
-from typing import Optional
-import numpy as np
-from einops import rearrange
 import random
-import math
 
 # util function
 def build_causal_mask(seq_length):
@@ -53,6 +33,15 @@ def init_weights(module):
             module.bias.data.zero_()
         if module.weight is not None:
             module.weight.data.fill_(1.0)
+
+def build_mlp(hidden_size, projector_dim, z_dim):
+    return nn.Sequential(
+                nn.Linear(hidden_size, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, z_dim),
+            )
 
 # attention layer with KV cache supported
 class Attention(nn.Module):
@@ -84,12 +73,10 @@ class Attention(nn.Module):
         self.kv_cache = False
         self.k_cache = None
         self.v_cache = None
-        self.cached_idx = 2 # prefix
 
     def reset_kv_cache(self):
         self.k_cache = None
         self.v_cache = None
-        self.cached_idx = 2 # prefix
 
     def forward(self, x: torch.Tensor, attn_mask=None) -> torch.Tensor:
         B, N, C = x.shape
@@ -106,9 +93,8 @@ class Attention(nn.Module):
                 k_cache = torch.cat([self.k_cache, k], dim=-2)
                 v_cache = torch.cat([self.v_cache, v], dim=-2)
 
-            self.k_cache = k_cache[:, :self.cached_idx]
-            self.v_cache = v_cache[:, :self.cached_idx]
-            self.cached_idx = N
+            self.k_cache = k_cache
+            self.v_cache = v_cache
 
             k = k_cache
             v = v_cache
@@ -188,7 +174,7 @@ class Block(nn.Module):
         return x
 
 
-class QAR(BaseModel):
+class reAR(BaseModel):
     def __init__(self, config):
         super().__init__()
         
@@ -227,17 +213,34 @@ class QAR(BaseModel):
         self.pos_embed = nn.init.trunc_normal_(
             nn.Parameter(torch.zeros(1, image_seq_len + 1024, embed_dim)), 0., 0.02)
 
+        self.target_aware_pos_embed = nn.init.trunc_normal_(
+            nn.Parameter(torch.zeros(1, image_seq_len + 1024, embed_dim)), 0., 0.02)
+
         # number of steps == image_seq_len
         self.timesteps_embeddings = nn.init.trunc_normal_(
             nn.Parameter(torch.zeros(1, image_seq_len + 100, embed_dim)), 0., 0.02)
         self.adaln_before_head = FinalLayer(embed_dim, norm_layer=norm_layer)
         self.lm_head = nn.Linear(embed_dim,
                                  target_codebook_size, bias=True)
-        self.mask_token_id = target_codebook_size
         self.condition_num_classes = condition_num_classes
         self.image_seq_len = image_seq_len
+        self.mask_token_id = target_codebook_size
         self.target_codebook_size = target_codebook_size
         self.none_condition_id = self.condition_num_classes + self.target_codebook_size + 1
+
+        self.transition_alignment = self.config.model.generator.get("transition_alignment", False)
+        self.encode_align = self.config.model.generator.get("encode_align", True)
+        self.decode_align = self.config.model.generator.get("decode_align", True)
+        if self.transition_alignment:
+            projection_dim = self.config.model.generator.get("projection_dim", 2048)
+            z_dim = self.config.model.generator.get("z_dim", 256)
+            self.encode_align_layer_idx = self.config.model.generator.get("encode_align_layer_idx", 0)
+            if self.encode_align:
+                self.encode_align_mlp = build_mlp(embed_dim, projection_dim, z_dim)
+                
+            self.decode_align_layer_idx = self.config.model.generator.get("decode_align_layer_idx", 15)
+            if self.decode_align:
+                self.decode_align_mlp = build_mlp(embed_dim, projection_dim, z_dim)
         
         self.apply(init_weights)
 
@@ -271,7 +274,7 @@ class QAR(BaseModel):
         shuffled_orders = []
 
         for _ in range(batch_size):
-            if random.random() < self.random_ratio:
+            if random.random() < 0.0: # always fix to raster order
                 # random order
                 shuffled_orders.append(torch.randperm(self.image_seq_len, device=x.device))
             else:
@@ -282,51 +285,49 @@ class QAR(BaseModel):
         return shuffled_orders.to(x.device)
     
     def set_random_ratio(self, new_ratio):
-        # Always set to 1.0 for dAR (different from RAR)
-        if self.config.model.generator.get("fix_orders", False):
-            self.random_ratio = 0.0
-        else:
-            self.random_ratio = 1.0
+        self.random_ratio = new_ratio
 
     def get_raster_orders(self, x):
         batch_size = x.shape[0]
         shuffled_orders = torch.stack([torch.arange(self.image_seq_len, device=x.device) for _ in range(batch_size)])
         return shuffled_orders
 
+    def perturb_input_tokens(self, input_tokens):
+        batch_size, seq_len = input_tokens.shape
+        mode = self.config.model.generator.get("perturb_mode", "switch")
+        
+        # Sample random ratios uniformly between 0 and 1 for each batch
+        batch_ratios = torch.rand(batch_size, 1, device=input_tokens.device) * self.random_ratio # 1.0 -> 0.0
+        # Expand the ratios to match sequence length
+        batch_ratios = batch_ratios.expand(-1, seq_len)
+        perturb_mask = torch.rand(batch_size, seq_len, device=input_tokens.device) < batch_ratios
+        
+        if mode == 'switch':
+            # Create random tokens within codebook size
+            random_tokens = torch.randint(0, self.target_codebook_size, (batch_size, seq_len), device=input_tokens.device)
+            # Apply perturbation by mixing original and random tokens based on mask
+            perturbed_tokens = torch.where(perturb_mask, random_tokens, input_tokens)
+        elif mode == 'mask':
+            # Replace perturbed tokens with mask token
+            perturbed_tokens = torch.where(perturb_mask, self.mask_token_id, input_tokens)
+        else:
+            raise ValueError(f"Unknown perturbation mode: {mode}")
+        
+        return perturbed_tokens, perturb_mask
+
     def shuffle(self, x, orders):
         batch_size, seq_len = x.shape[:2]
-        batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, orders.shape[1])
+        batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, seq_len)
         shuffled_x = x[batch_indices, orders]
         return shuffled_x
 
     def unshuffle(self, shuffled_x, orders):
         # Unshuffle the tensor based on the original orders
         batch_size, seq_len = shuffled_x.shape[:2]
-        batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, orders.shape[1])
+        batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, seq_len)
         unshuffled_x = torch.zeros_like(shuffled_x)
         unshuffled_x[batch_indices, orders] = shuffled_x
         return unshuffled_x
-
-    def masking_input_tokens(self, input_tokens):
-        batch_size, seq_len = input_tokens.shape
-        device = input_tokens.device
-
-        timesteps = torch.zeros((batch_size,), device=device).float().uniform_(0, 1.0)
-        mask_ratio = torch.acos(timesteps) / (math.pi * 0.5) # arccos schedule
-        mask_ratio = torch.clamp(mask_ratio, min=1e-3, max=1. - 1e-3)
-        num_token_masked = (seq_len * mask_ratio).round().clamp(min=1)
-        batch_indices = torch.arange(seq_len, device=device).repeat(batch_size, 1)
-        masks = batch_indices > rearrange(num_token_masked, 'b -> b 1')
-        masked_tokens = torch.where(masks, self.mask_token_id, input_tokens)
-        return masked_tokens, masks, mask_ratio
-    
-    def get_mask_ratio(self, t):
-        '''
-        t is a tensor of shape (batch_size,), the timestep of the diffusion process
-        '''
-        mask_ratio = torch.acos(t) / (math.pi * 0.5) # arccos schedule
-        mask_ratio = torch.clamp(mask_ratio, min=1e-3, max=1. - 1e-3)
-        return mask_ratio
 
     def preprocess_condition(self, condition, cond_drop_prob=0.0):
         # Set class condition to None condition
@@ -344,7 +345,6 @@ class QAR(BaseModel):
         orders = self.sample_orders(input_ids)
         return self.forward_fn(input_ids, condition, return_labels, orders)
 
-    # @torch.compile
     def forward_fn(self, input_ids, condition,
                    return_labels=False,
                    orders=None,
@@ -360,9 +360,12 @@ class QAR(BaseModel):
             orders = self.get_raster_orders(input_ids)
 
         labels = input_ids.clone()
-        if not is_sampling:
-            labels = self.shuffle(labels, orders)
-            input_ids, masks, mask_ratios = self.masking_input_tokens(labels)
+
+        if not is_sampling and self.config.model.generator.get("perturb_mode", "none") in ["switch", "mask"]:
+            input_ids, perturb_mask = self.perturb_input_tokens(input_ids)
+        else:
+            perturb_mask = None
+        
         # prepend condition token
         input_ids = torch.cat([condition.view(condition.shape[0], -1),
                                input_ids.view(input_ids.shape[0], -1),], dim=1)
@@ -377,6 +380,17 @@ class QAR(BaseModel):
         pos_embed_prefix = pos_embed[:, :prefix]
         pos_embed_postfix = self.shuffle(pos_embed[:, prefix:prefix+self.image_seq_len], orders)
 
+        # prepare target-aware positional embeddings.
+        target_aware_pos_embed = self.target_aware_pos_embed.repeat(input_ids.shape[0], 1, 1)
+        # target_aware_pos_embed_prefix = target_aware_pos_embed[:, :prefix]
+        target_aware_pos_embed_postfix = self.shuffle(target_aware_pos_embed[:, prefix:prefix+self.image_seq_len], orders)
+
+        if not is_sampling:
+            # shuffle labels
+            labels = self.shuffle(labels, orders)
+            # randomized permutation: during training, we need to shuffle the input_ids's order but not for sampling
+            embeddings = torch.cat([embeddings[:, :1], self.shuffle(embeddings[:, 1:], orders)], dim=1)
+
         x = embeddings
         # prepend the cls token
         cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
@@ -384,6 +398,12 @@ class QAR(BaseModel):
 
         # add original pos embed
         x = x + torch.cat([pos_embed_prefix, pos_embed_postfix], dim=1)[:, :x.shape[1]]
+
+        # add target-aware pos embed
+        target_aware_pos_embed = torch.cat(
+            [torch.zeros_like(x[:, :prefix-1]), target_aware_pos_embed_postfix, torch.zeros_like(x[:, -1:])], dim=1
+        )
+        x = x + target_aware_pos_embed[:, :x.shape[1]]
 
         # causal attention masking
         attn_mask = self.attn_mask[:x.shape[1], :x.shape[1]]
@@ -393,11 +413,14 @@ class QAR(BaseModel):
 
         if self.blocks[0].attn.kv_cache:
             if self.blocks[0].attn.k_cache is not None and self.blocks[0].attn.v_cache is not None:
-                start_idx = self.blocks[0].attn.cached_idx
-                x = x[:, start_idx:]
-                attn_mask = attn_mask[-x.shape[1]:, :]
-                condition_token = condition_token[:, start_idx:]
+                # only need to process the last token
+                x = x[:, -1:]
+                # attn_mask = None
+                # only keep the last condition
+                condition_token = condition_token[:, -1:]
 
+        encode_z = None
+        decode_z = None
         for idx, blk in enumerate(self.blocks):
             if self.use_checkpoint:
                 x = torch.utils.checkpoint.checkpoint(
@@ -405,17 +428,25 @@ class QAR(BaseModel):
             else:
                 x = blk(x, attn_mask=attn_mask, c=condition_token)
 
-        if not self.blocks[0].attn.kv_cache:
-            # remove cls token and condition token
-            x = x[:, prefix:]
-            condition_token = condition_token[:, prefix:]
+            # transition alignment
+            if (not is_sampling) and self.transition_alignment:
+                if idx == self.encode_align_layer_idx and self.encode_align:
+                    encode_z = self.encode_align_mlp(x)
+                elif idx == self.decode_align_layer_idx and self.decode_align:
+                    decode_z = self.decode_align_mlp(x)
 
+        if not self.blocks[0].attn.kv_cache:
+            # remove cls token
+            x = x[:, prefix - 1:]
+            condition_token = condition_token[:, prefix - 1:]
 
         x = self.adaln_before_head(x, condition_token)
-        x = self.lm_head(x) # [B, seq_len, vocab_size]
+        x = self.lm_head(x)
 
-        if return_labels:
-            return x, labels, masks, mask_ratios
+        if return_labels and not self.transition_alignment:
+            return x, labels, None, None, perturb_mask
+        elif return_labels and self.transition_alignment:
+            return x, labels, encode_z, decode_z, perturb_mask
         return x
     
     @torch.no_grad()
@@ -424,9 +455,7 @@ class QAR(BaseModel):
                  guidance_scale,
                  randomize_temperature,
                  guidance_scale_pow,
-                 guidance_decay="power-cosine",
-                 num_sample_steps=8,
-                 kv_cache=False,
+                 kv_cache=True,
                  **kwargs):
         condition = self.preprocess_condition(
             condition, cond_drop_prob=0.0)
@@ -438,61 +467,36 @@ class QAR(BaseModel):
         if kv_cache:
             self.enable_kv_cache()
 
-        fix_orders = kwargs.get("fix_orders", False) or self.config.model.generator.get("fix_orders", False)
+        orders = None
+        cfg_orders = None
 
-        if fix_orders:
-            self.random_ratio = 0.0
-        else:
-            self.random_ratio = 1.0
-
-        orders = self.sample_orders(ids)
-        cfg_orders = torch.cat([orders, orders], dim=0)
-
-        for step in range(num_sample_steps):
-            ratio = 1. * (step + 1) / num_sample_steps
-            token_ratio = 1 - np.arccos(ratio) / (math.pi * 0.5)
-            token_len = max(int(self.image_seq_len * token_ratio), ids.shape[1] + 1)
-            q_token_len = token_len - ids.shape[1]
-            mask_ids = torch.full((num_samples, q_token_len), self.mask_token_id, device=device)
-            ids = torch.cat([ids, mask_ids], dim=1) # [B, token_len]
-            current_orders = orders[:, :token_len]
-            current_cfg_orders = cfg_orders[:, :token_len]
-
+        for step in range(self.image_seq_len):
             # ref: https://github.com/sail-sg/MDT/blob/441d6a1d49781dbca22b708bbd9ed81e9e3bdee4/masked_diffusion/models.py#L513C13-L513C23
-            if guidance_decay == "power-cosine":
-                scale_pow = torch.ones((1), device=device) * guidance_scale_pow
-                scale_step = (1 - torch.cos(
-                    ((step / self.image_seq_len) ** scale_pow) * torch.pi)) * 1/2
-                cfg_scale = (guidance_scale - 1) * scale_step + 1
-            elif guidance_decay == "constant":
-                cfg_scale = guidance_scale
-            else:
-                raise ValueError(f"Unknown guidance decay: {guidance_decay}")
+            scale_pow = torch.ones((1), device=device) * guidance_scale_pow
+            scale_step = (1 - torch.cos(
+                ((step / self.image_seq_len) ** scale_pow) * torch.pi)) * 1/2
+            cfg_scale = (guidance_scale - 1) * scale_step + 1
 
             if guidance_scale != 0:
                 logits = self.forward_fn(
                     torch.cat([ids, ids], dim=0),
                     torch.cat([condition, self.get_none_condition(condition)], dim=0),
-                    orders=current_cfg_orders, is_sampling=True)
+                    orders=cfg_orders, is_sampling=True)
                 cond_logits, uncond_logits = logits[:num_samples], logits[num_samples:]
                 logits = uncond_logits + (cond_logits - uncond_logits) * cfg_scale
             else:
                 logits = self.forward_fn(
-                    ids, condition, orders=current_orders, is_sampling=True
+                    ids, condition, orders=orders, is_sampling=True
                 )
 
             # keep the logit of last token
-            logits = logits[:, -q_token_len:]
+            logits = logits[:, -1]
             logits = logits / randomize_temperature
             probs = F.softmax(logits, dim=-1)
-            probs = probs.reshape(-1, probs.shape[-1])
             sampled = torch.multinomial(probs, num_samples=1)
-            sampled = sampled.reshape(num_samples, -1)
-            ids = ids[:, :-q_token_len] # removed masked tokens
             ids = torch.cat((ids, sampled), dim = -1)
 
-        if not fix_orders:
-            ids = self.unshuffle(ids, orders)
+
         self.disable_kv_cache()
         return ids
     

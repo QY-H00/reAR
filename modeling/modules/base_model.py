@@ -1,9 +1,5 @@
-"""This file contains some base class implementation for models.
-
-This file may have been modified by Bytedance Ltd. and/or its affiliates (“Bytedance's Modifications”).
-All Bytedance's Modifications are Copyright (year) Bytedance Ltd. and/or its affiliates. 
-
-Reference:
+"""Adapted from:
+    https://github.com/bytedance/1d-tokenizer/blob/main/modeling/modules/base_model.py
     https://github.com/huggingface/open-muse/blob/main/muse/modeling_utils.py
 """
 import os

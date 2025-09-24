@@ -1,21 +1,5 @@
-"""Sampling scripts for TiTok on ImageNet.
-
-Copyright (2024) Bytedance Ltd. and/or its affiliates
-
-Licensed under the Apache License, Version 2.0 (the "License"); 
-you may not use this file except in compliance with the License. 
-You may obtain a copy of the License at 
-
-    http://www.apache.org/licenses/LICENSE-2.0 
-
-Unless required by applicable law or agreed to in writing, software 
-distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-See the License for the specific language governing permissions and 
-limitations under the License.
-
-Reference: 
-    https://github.com/facebookresearch/DiT/blob/main/sample_ddp.py
+"""Adapted from:
+    https://github.com/bytedance/1d-tokenizer/blob/main/scripts/sample_imagenet_rar.py
 """
 
 import demo_util
@@ -24,7 +8,6 @@ import torch
 import torch.distributed as dist
 from PIL import Image
 import os
-from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
 
@@ -67,20 +50,13 @@ def main():
     torch.manual_seed(seed)
     torch.cuda.set_device(device)
     print(f"Starting rank={rank}, seed={seed}, world_size={dist.get_world_size()}.") 
-
-    if rank == 0:
-        # downloads from hf
-        hf_hub_download(repo_id="fun-research/TiTok", filename=f"{config.experiment.tokenizer_checkpoint}", local_dir="pretrained_checkpoints/")
-        hf_hub_download(repo_id="fun-research/TiTok", filename=f"{config.experiment.generator_checkpoint}", local_dir="pretrained_checkpoints/")
     dist.barrier()
 
-    titok_tokenizer = demo_util.get_titok_tokenizer(config)
-    titok_generator = demo_util.get_titok_generator(config)
-    titok_tokenizer.to(device)
-    titok_generator.to(device)
-
-    # Ensure new parameters take effort
-    titok_generator.config = config
+    # maskgit-vq as tokenizer
+    tokenizer = demo_util.get_tokenizer(config)
+    generator = demo_util.get_rear_generator(config)
+    tokenizer.to(device)
+    generator.to(device)
 
     if rank == 0:
         os.makedirs(sample_folder_dir, exist_ok=True)
@@ -110,18 +86,15 @@ def main():
         y = torch.from_numpy(all_classes[cur_idx * n: (cur_idx+1)*n]).to(device)
         cur_idx += 1
 
-        with torch.no_grad():
-            samples = demo_util.sample_fn(
-                generator=titok_generator,
-                tokenizer=titok_tokenizer,
-                labels=y.long(),
-                randomize_temperature=config.model.generator.randomize_temperature,
-                softmax_temperature_annealing=True,
-                num_sample_steps=config.model.generator.num_steps,
-                guidance_scale=config.model.generator.guidance_scale,
-                guidance_decay=config.model.generator.guidance_decay,
-                device=device
-            )
+        samples = demo_util.sample_fn(
+            generator=generator,
+            tokenizer=tokenizer,
+            labels=y.long(),
+            randomize_temperature=config.model.generator.randomize_temperature,
+            guidance_scale=config.model.generator.guidance_scale,
+            guidance_scale_pow=config.model.generator.guidance_scale_pow,
+            device=device
+        )
         # Save samples to disk as individual .png files
         for i, sample in enumerate(samples):
             index = i * dist.get_world_size() + rank + total

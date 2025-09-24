@@ -1,24 +1,5 @@
-"""Vector quantizer.
-
-Copyright (2024) Bytedance Ltd. and/or its affiliates
-
-Licensed under the Apache License, Version 2.0 (the "License"); 
-you may not use this file except in compliance with the License. 
-You may obtain a copy of the License at 
-
-    http://www.apache.org/licenses/LICENSE-2.0 
-
-Unless required by applicable law or agreed to in writing, software 
-distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-See the License for the specific language governing permissions and 
-limitations under the License.
-
-Reference: 
-    https://github.com/CompVis/taming-transformers/blob/master/taming/modules/vqvae/quantize.py
-    https://github.com/google-research/magvit/blob/main/videogvt/models/vqvae.py
-    https://github.com/CompVis/latent-diffusion/blob/main/ldm/modules/distributions/distributions.py
-    https://github.com/lyndonzheng/CVQ-VAE/blob/main/quantise.py
+"""Adapted from:
+    https://github.com/markweberdev/maskbit/blob/main/modeling/quantizer/quantizer.py
 """
 from typing import Mapping, Text, Tuple
 

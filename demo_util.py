@@ -1,18 +1,5 @@
-"""Demo file for sampling images from TiTok.
-
-Copyright (2024) Bytedance Ltd. and/or its affiliates
-
-Licensed under the Apache License, Version 2.0 (the "License"); 
-you may not use this file except in compliance with the License. 
-You may obtain a copy of the License at 
-
-    http://www.apache.org/licenses/LICENSE-2.0 
-
-Unless required by applicable law or agreed to in writing, software 
-distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-See the License for the specific language governing permissions and 
-limitations under the License. 
+"""Adapted from:
+    https://github.com/bytedance/1d-tokenizer/blob/main/demo_util.py
 """
 
 
@@ -21,10 +8,7 @@ import torch
 from safetensors.torch import load_model
 from omegaconf import OmegaConf
 from modeling.titok import TiTok, MaskgitVQ
-from modeling.maskgit import ImageBert, UViTBert
-from modeling.rar import RAR
-from modeling.dar import dAR
-from modeling.qar import QAR
+from modeling.rear import reAR
 from modeling.vqplus import VQPlus # VQGAN+ From MaskBit
 
 
@@ -44,8 +28,6 @@ def get_tokenizer(config):
     assert "model_type" in config.model.vq_model, "model_type is not specified in the config"
     if config.model.vq_model.model_type == "titok":
         return get_titok_tokenizer(config)
-    elif config.model.vq_model.model_type == "gigatok":
-        return get_gigatok_tokenizer(config)
     elif config.model.vq_model.model_type == "vqplus":
         return get_vqplus_tokenizer(config)
     elif config.model.vq_model.model_type == "maskgitvq":
@@ -78,27 +60,8 @@ def get_maskgitvq_tokenizer(config):
     tokenizer.requires_grad_(False)
     return tokenizer
 
-def get_gigatok_tokenizer(config):
-    raise NotImplementedError("GigaTok tokenizer is not implemented yet")
-
-def get_titok_generator(config):
-    if config.model.generator.model_type == "ViT":
-        model_cls = ImageBert
-    elif config.model.generator.model_type == "UViT":
-        model_cls = UViTBert
-    else:
-        raise ValueError(f"Unsupported model type {config.model.generator.model_type}")
-    if "yucornetto" in config.experiment.generator_checkpoint:
-        generator = model_cls.from_pretrained(config.experiment.generator_checkpoint)
-    else:
-        generator = model_cls(config)
-        generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
-    generator.eval()
-    generator.requires_grad_(False)
-    return generator
-
-def get_rar_generator(config):
-    model_cls = RAR
+def get_rear_generator(config):
+    model_cls = reAR
     generator = model_cls(config)
     if ".safetensors" in config.experiment.generator_checkpoint:
         missing, unexpected = load_model(generator, config.experiment.generator_checkpoint, device="cpu")
@@ -109,32 +72,6 @@ def get_rar_generator(config):
     generator.eval()
     generator.requires_grad_(False)
     generator.set_random_ratio(0)
-    return generator
-
-def get_dar_generator(config):
-    model_cls = dAR
-    generator = model_cls(config)
-    if ".safetensors" in config.experiment.generator_checkpoint:
-        missing, unexpected = load_model(generator, config.experiment.generator_checkpoint, device="cpu")
-        print(missing)
-        print(unexpected)
-    else:
-        generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
-    generator.eval()
-    generator.requires_grad_(False)
-    return generator
-
-def get_qar_generator(config):
-    model_cls = QAR
-    generator = model_cls(config)
-    if ".safetensors" in config.experiment.generator_checkpoint:
-        missing, unexpected = load_model(generator, config.experiment.generator_checkpoint, device="cpu")
-        print(missing)
-        print(unexpected)
-    else:
-        generator.load_state_dict(torch.load(config.experiment.generator_checkpoint, map_location="cpu"))
-    generator.eval()
-    generator.requires_grad_(False)
     return generator
 
 @torch.no_grad()

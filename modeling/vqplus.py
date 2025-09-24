@@ -1,4 +1,8 @@
-"""This file contains the definition of the our tokenizer, which can use VQ or LFQ."""
+"""Adapted from:
+    https://github.com/markweberdev/maskbit/blob/main/modeling/conv_vqgan.py
+
+This file contains the definition of the our tokenizer, which can use VQ or LFQ.
+"""
 
 import math
 from typing import Mapping, Text, Tuple

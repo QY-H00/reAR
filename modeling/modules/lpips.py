@@ -1,9 +1,4 @@
-"""This file contains code for LPIPS.
-
-This file may have been modified by Bytedance Ltd. and/or its affiliates (“Bytedance's Modifications”).
-All Bytedance's Modifications are Copyright (year) Bytedance Ltd. and/or its affiliates. 
-
-Reference:
+"""Adapted from:
     https://github.com/richzhang/PerceptualSimilarity/
     https://github.com/CompVis/taming-transformers/blob/master/taming/modules/losses/lpips.py
     https://github.com/CompVis/taming-transformers/blob/master/taming/util.py

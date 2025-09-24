@@ -1,18 +1,5 @@
-"""Training script for RAR.
-
-Copyright (2024) Bytedance Ltd. and/or its affiliates
-
-Licensed under the Apache License, Version 2.0 (the "License"); 
-you may not use this file except in compliance with the License. 
-You may obtain a copy of the License at 
-
-    http://www.apache.org/licenses/LICENSE-2.0 
-
-Unless required by applicable law or agreed to in writing, software 
-distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-See the License for the specific language governing permissions and 
-limitations under the License.
+"""Adapted from:
+    https://github.com/bytedance/1d-tokenizer/blob/main/scripts/train_rar.py
 """
 import math
 import os
@@ -33,7 +20,6 @@ from utils.train_utils import (
     train_one_epoch_generator)
 
 from demo_util import get_tokenizer
-
 
 def main():
     workspace = os.environ.get('WORKSPACE', '')
@@ -63,14 +49,6 @@ def main():
 
     ddp_kwargs = DistributedDataParallelKwargs()
 
-    # from accelerate.utils import TorchDynamoPlugin
-    # dynamo_plugin = TorchDynamoPlugin(
-    #     backend="inductor",  # Options: "inductor", "aot_eager", "aot_nvfuser", etc.
-    #     mode="default",      # Options: "default", "reduce-overhead", "max-autotune"
-    #     fullgraph=True,
-    #     dynamic=False
-    # )
-
     accelerator = Accelerator(
         gradient_accumulation_steps=config.training.gradient_accumulation_steps,
         mixed_precision=config.training.mixed_precision,
@@ -78,26 +56,20 @@ def main():
         project_dir=config.experiment.logging_dir,
         split_batches=False,
         kwargs_handlers=[ddp_kwargs],
-        # dynamo_plugin=dynamo_plugin
     )
 
-    logger = setup_logger(name="QAR", log_level="INFO",
+    logger = setup_logger(name="reAR", log_level="INFO",
      output_file=f"{output_dir}/log{accelerator.process_index}.txt")
 
+    # We need to initialize the trackers we use, and also store our configuration.
+    # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
         if config.training.enable_swanlab:
             tracker.start()
-        
+
         accelerator.init_trackers(
             project_name=config.experiment.project,
             config=OmegaConf.to_container(config, resolve=True),
-            # init_kwargs={
-            #     "wandb": {
-            #         "entity": config.experiment.entity,
-            #         "name": config.experiment.name,
-            #         "id": config.experiment.name,
-            #     }
-            # }
         )
         config_path = Path(output_dir) / "config.yaml"
         logger.info(f"Saving config to {config_path}")
@@ -110,25 +82,24 @@ def main():
 
     accelerator.wait_for_everyone()
 
-    # Get the tokenizer from config: can be titok / maskgit-vq / maskgit-vq+
+    # get maskgit-vq tokenizer
     tokenizer = get_tokenizer(config)
     tokenizer.to(accelerator.device)
 
     model, ema_model, loss_module = create_model_and_loss_module(
-        config, logger, accelerator, model_type="qar")
+        config, logger, accelerator, model_type="rar")
 
     optimizer, _ = create_optimizer(config, logger, model, loss_module,
                                     need_discrminator=False)
 
     lr_scheduler, _ = create_lr_scheduler(
-        config, logger, accelerator, optimizer, discriminator_optimizer=None)
+        config, logger, accelerator, optimizer)
 
     train_dataloader, _ = create_dataloader(config, logger, accelerator)
 
     # Prepare everything with accelerator.
     logger.info("Preparing model, optimizer and dataloaders")
     if config.dataset.params.get("pretokenization", ""):
-        logger.info("Using pretokenized dataset!!")
         model, optimizer, lr_scheduler, train_dataloader = accelerator.prepare(
             model, optimizer, lr_scheduler, train_dataloader
         )
@@ -139,9 +110,6 @@ def main():
         )
     if config.training.use_ema:
         ema_model.to(accelerator.device)
-
-    # Compile the model to further accelerate
-    # model = torch.compile(model, backend='max-autotune')
 
     total_batch_size_without_accum = config.training.per_gpu_batch_size * accelerator.num_processes
     num_batches = math.ceil(
@@ -171,7 +139,7 @@ def main():
         strict=True)
 
     for current_epoch in range(first_epoch, num_train_epochs):
-        accelerator.print(f"Epoch {current_epoch}/{num_train_epochs-1} started.")
+        accelerator.print(f"Epoch {current_epoch * 10}/{num_train_epochs-1} started.") # the pretokenized file includes 10 epochs
         global_step = train_one_epoch_generator(config, logger, accelerator,
                             model, ema_model, loss_module,
                             optimizer,
@@ -179,11 +147,16 @@ def main():
                             train_dataloader,
                             tokenizer,
                             global_step,
-                            model_type="qar")
+                            model_type="rar")
         # Stop training if max steps is reached.
         if global_step >= config.training.max_train_steps:
             accelerator.print(
                 f"Finishing training: Global step is >= Max train steps: {global_step} >= {config.training.max_train_steps}"
+            )
+            break
+        if global_step >= config.training.get("stop_steps", config.training.max_train_steps):
+            accelerator.print(
+                f"Reach stop steps: Global step is >= Stop steps: {global_step} >= {config.training.get('stop_steps', config.training.max_train_steps)}"
             )
             break
 

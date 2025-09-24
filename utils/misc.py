@@ -1,4 +1,5 @@
-"""This file is borrowed from https://github.com/LTH14/mar/blob/main/util/misc.py
+"""Adapted from:
+    https://github.com/LTH14/mar/blob/main/util/misc.py
 """
 import builtins
 import datetime

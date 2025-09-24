@@ -1,4 +1,9 @@
-"""This file contains the definition of some utility functions for the quantizer."""
+"""Adapted from:
+    https://github.com/markweberdev/maskbit/blob/main/modeling/quantizer/quantizer_utils.py
+
+This file contains the definition of some utility functions for the quantizer.
+"""
+
 from typing import Tuple
 import torch
 

@@ -1,4 +1,8 @@
-"""This file contains the definition of the look-free quantizer."""
+"""Adapted from:
+    https://github.com/markweberdev/maskbit/blob/main/modeling/quantizer/lookup_free.py
+
+This file contains the definition of the look-free quantizer.
+"""
 
 from typing import Mapping, Text, Tuple
 

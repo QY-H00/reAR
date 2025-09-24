@@ -1,34 +1,9 @@
-"""This file contains code for MaskGIT-VQGAN.
-
-This file may have been modified by Bytedance Ltd. and/or its affiliates (“Bytedance's Modifications”).
-All Bytedance's Modifications are Copyright (year) Bytedance Ltd. and/or its affiliates. 
-
-Reference:
+"""Adapted from:
     https://github.com/huggingface/open-muse/blob/main/muse/modeling_maskgit_vqgan.py
 """
-# Copyright 2023 Google LLC and The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
-r"""MaskGIT Tokenizer based on VQGAN.
-
-This tokenizer is a reimplementation of VQGAN [https://arxiv.org/abs/2012.09841]
-with several modifications. The non-local layers are removed from VQGAN for
-faster speed.
-"""
 
 import math
-
 import torch
 import torch.nn.functional as F
 from torch import nn

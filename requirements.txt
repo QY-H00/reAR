@@ -12,6 +12,7 @@ gdown
 huggingface-hub
 einops
 wandb
+swanlab
 torch-fidelity
 torchinfo
 webdataset

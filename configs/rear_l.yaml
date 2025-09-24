@@ -1,6 +1,6 @@
 experiment:
-    project: "rar_generation"
-    name: "rar-b"
+    project: "reAR"
+    name: "rear-b"
     max_train_examples: 1_281_167
     save_every: 50_000
     eval_every: 50_000
@@ -8,41 +8,49 @@ experiment:
     log_every: 50
     log_grad_norm_every: 1_000
     resume: True
+    tokenizer_checkpoint: "ckpt/maskgitvq.bin"
 
 model:
     vq_model:
+        model_type: "maskgitvq"
         codebook_size: 1024
         token_size: 256
         num_latent_tokens: 256
         finetune_decoder: False
-        pretrained_tokenizer_weight: "maskgit-vqgan-imagenet-f16-256.bin"
+        pretrained_tokenizer_weight: "ckpt/maskgit-vqgan-imagenet-f16-256.bin"
     
     generator:
-        hidden_size: 768
+        hidden_size: 1024
         num_hidden_layers: 24
         num_attention_heads: 16
-        intermediate_size: 3072
+        intermediate_size: 4096
         dropout: 0.1
         attn_drop: 0.1
         class_label_dropout: 0.1
         image_seq_len: 256
         condition_num_classes: 1000
 
-        # sampling hyper-params for RAR-B
         randomize_temperature: 1.0
-        guidance_scale: 16.0
-        guidance_scale_pow: 2.75
+        guidance_scale: 15.0
+        guidance_scale_pow: 2.5
         use_checkpoint: False # True to save memory
+        kv_cache: True
 
-        randomness_anneal_start: 125000 # 200 epoch
-        randomness_anneal_end: 187500 # 300 epoch
+        perturb_mode: "switch"
+        randomness_anneal_start: 0
+        randomness_anneal_end: 187500
+        
+        transition_alignment: True
+        transition_alignment_weight: 1.0
+        encode_align_layer_idx: 0
+        decode_align_layer_idx: 18
 
 dataset:
     params:
         # use pretokenized dataset for speed-up
-        pretokenization: "maskgitvq.jsonl"
-        train_shards_path_or_url: "imagenet_sharded/train/imagenet-train-{0000..0252}.tar"
-        eval_shards_path_or_url: "imagenet_sharded/val/imagenet-val-{0000..0009}.tar"
+        pretokenization: "dataset/pretokenized/maskgitvq.jsonl"
+        train_shards_path_or_url: "dataset/imagenet_sharded/train/imagenet-train-{0000..1023}.tar"
+        eval_shards_path_or_url: "dataset/imagenet_sharded/val/imagenet-val-{0000..0063}.tar"
         num_workers_per_gpu: 12
     preprocessing:
         resize_shorter_edge: 256
@@ -67,8 +75,8 @@ lr_scheduler:
         end_lr: 1e-5
 
 training:
-    gradient_accumulation_steps: 1
-    per_gpu_batch_size: 64 # 32 GPU, total batch size 2048
+    gradient_accumulation_steps: 2
+    per_gpu_batch_size: 128 # 8 GPU, total batch size 2048
     mixed_precision: "bf16"
     enable_tf32: True
     enable_wandb: True
