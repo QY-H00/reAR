@@ -1,9 +1,5 @@
 # reAR: Rethink Visual Autoregressive Generation via Robust Embedding Regularization
 
-[![Paper](https://img.shields.io/badge/Paper-arXiv-red.svg)](https://arxiv.org/abs/placeholder)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
-
 This repository contains the official implementation of the paper **"reAR: Rethink Standard Visual Autoregressive Generation via Robust Embedding Regularization"**.
 
 ## 🎯 Overview
@@ -176,20 +172,5 @@ We thank the following projects for their excellent work:
 - [MaskBit](https://github.com/markweberdev/maskbit/tree/main): Embedding-free Image Generation via Bit Tokens
 - [REPA](https://github.com/sihyun-yu/REPA/tree/main): Representation Alignment for Generation:
 Training Diffusion Transformers Is Easier Than You Think
-
-## 📚 Citation
-
-If you find this work useful in your research, please cite our paper:
-
-```bibtex
-@article{rear2024,
-  title={reAR: Rethink Visual Autoregressive Generation via Robust Embedding Regularization},
-  author={Your Name and Co-authors},
-  journal={arXiv preprint},
-  year={2024}
-}
-```
-
----
 
 **Note**: This is a placeholder citation. Please update with the actual paper details when available.
