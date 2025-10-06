@@ -1,10 +1,54 @@
-# reAR: Rethink Visual Autoregressive Generation via Robust Embedding Regularization
+<div align="center">
+<h1>reAR: Rethink Visual Autoregressive Generation via Generator-Tokenizer Consistency Regularization</h1>
 
-This repository contains the official implementation of the paper **"reAR: Rethink Standard Visual Autoregressive Generation via Robust Embedding Regularization"**.
+<div align="center">
+<a href=xx target="_blank"><img src=https://img.shields.io/badge/arXiv-b5212f.svg?logo=arxiv height=20px></a>
+<!-- <a href=https://huggingface.co/spaces/qyoo/Conceptrol target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=25px></a> -->
+<a href=xx target="_blank"><img src= https://img.shields.io/badge/GitHub%20Project%20Page-bb8a2e.svg?logo=github height=20px></a>
+</div>
 
-## 🎯 Overview
+<br>
 
-We rethink the challenges in visual autoregressive generation and propose a simple yet effective technique that enables standard visual AR (rasterization order) to outperform methods with advanced tokenizers and generation orders. Our approach introduces robust embedding regularization that significantly improves the quality and efficiency of visual autoregressive models.
+<div align="center">
+<div>
+  <a href="https://qy-h00.github.io" target="_blank">Qiyuan He</a><sup>1</sup> &nbsp;
+  <a target="_blank">Yicong Li</a><sup>1</sup> &nbsp;
+  <a target="_blank">Haotian Ye</a><sup>2</sup> &nbsp;
+  <a target="_blank">Jinghao Wang</a><sup>3</sup> &nbsp;
+  <a target="_blank">Xinyao Liao</a><sup>1</sup> &nbsp;
+  
+  <a target="_blank">Pheng-Ann Heng</a><sup>3</sup> &nbsp;
+  <a target="_blank">Stefano Ermon</a><sup>2</sup> &nbsp;
+  <a target="_blank">James Zhou</a><sup>2</sup> &nbsp;
+  <a href="https://www.comp.nus.edu.sg/~ayao//" target="_blank">Angela Yao</a><sup>1</sup>
+  </sup></a>
+  <br>
+</div>
+<div>
+  <sup>1</sup>National University of Singapore &nbsp;
+  <sup>2</sup>Stanford University &nbsp;
+  <sup>3</sup>The Chinese University of Hong Kong
+</div>
+</br>
+</div>
+
+<p align="center">
+  <img src="assets/pipeline.png">
+</p>
+<!-- <p align="left">
+<strong>Overview: We propose reAR, a simple regularization method that fixes generator-tokenizer inconsistency in visual autoregressive models, i.e, let the AR model generates tokens that is more friendly for the decoder of visual tokenizer. Without altering tokenization and inference, reAR boosts AR on vanilla VQGAN to 1.86 (461M) and AliTok to 1.42 (177M).</strong>
+</p> -->
+
+<p align="left">
+<strong>Overview</strong>: We propose reAR, a simple regularization method that fixes generator-tokenizer inconsistency in visual autoregressive models, i.e, let the AR model generates tokens that is more friendly for the decoder of visual tokenizer. Without altering tokenization and inference, reAR boosts AR on vanilla VQGAN to 1.86 (461M) and AliTok to 1.42 (177M).
+</p>
+</div>
+
+<!-- This repository contains the official implementation of the paper **"reAR: Rethink Standard Visual Autoregressive Generation via Robust Embedding Regularization"**. -->
+
+<!-- ## 🎯 Overview
+
+We identify a key bottleneck in visual autoregressive models: generator–tokenizer inconsistency, where **AR-generated tokens are not well decoded by the tokenizer**. To address this, we propose reAR, a simple token-wise regularization strategy that trains the AR model to recover the embedding of the current token and predict the target embedding under noisy context. reAR introduces no changes to the tokenization or inference pipeline, yet substantially improves performance. On ImageNet, it reduces gFID to 1.86 and boosts IS to 316.9 based on vanilla VQGAN, and with advanced tokenizers achieves a gFID of 1.42 using only 177M parameters. -->
 
 
 ## 🚀 Quick Start
@@ -152,18 +196,6 @@ python3 guided-diffusion/evaluations/evaluator.py \
     VIRTUAL_imagenet256_labeled.npz ${output_dir}.npz
 ```
 
-## 📈 Results
-
-Our method achieves state-of-the-art performance on ImageNet generation benchmarks. For detailed results and comparisons, please refer to our paper.
-
-## 🤝 Contributing
-
-We welcome contributions! Please feel free to submit issues and pull requests.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 🙏 Acknowledgments
 
 We thank the following projects for their excellent work:
@@ -172,5 +204,5 @@ We thank the following projects for their excellent work:
 - [MaskBit](https://github.com/markweberdev/maskbit/tree/main): Embedding-free Image Generation via Bit Tokens
 - [REPA](https://github.com/sihyun-yu/REPA/tree/main): Representation Alignment for Generation:
 Training Diffusion Transformers Is Easier Than You Think
+- [AliTok](https://github.com/ali-vilab/alitok): Towards Sequence Modeling Alignment between Tokenizer and Autoregressive Model
 
-**Note**: This is a placeholder citation. Please update with the actual paper details when available.
