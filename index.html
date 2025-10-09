@@ -1,0 +1,984 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+<style type="text/css">
+body {
+    font-family: "Titillium Web", "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+    font-weight: 300;
+    font-size: 17px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+@media screen and (min-width: 980px){
+    body {
+        width: 980px;
+    }
+}
+
+h1 {
+    font-weight:300;
+    line-height: 1.15em;
+}
+
+h2 {
+    font-size: 1.75em;
+}
+a:link,a:visited {
+    color: #0E710E;
+    text-decoration: none;
+}
+a:hover {
+    color: #208799;
+}
+h1 {
+    text-align: center;
+}
+h2,h3 {
+    text-align: left;
+}
+
+h1 {
+    font-size: 40px;
+    font-weight: 500;
+}
+h2 {
+    font-weight: 400;
+    margin: 16px 0px 4px 0px;
+}
+h3 {
+    font-weight: 600;
+    margin: 16px 0px 4px 0px;
+}
+
+.paper-title {
+    padding: 1px 0px 1px 0px;
+}
+section {
+    margin: 32px 0px 32px 0px;
+    text-align: justify;
+    clear: both;
+}
+.col-5 {
+     width: 20%;
+     float: left;
+}
+.col-4 {
+     width: 25%;
+     float: left;
+}
+.col-3 {
+     width: 33%;
+     float: left;
+}
+.col-2 {
+     width: 50%;
+     float: left;
+}
+.col-1 {
+     width: 100%;
+     float: left;
+}
+
+.author-row, .affil-row {
+    font-size: 26px;
+}
+
+.author-row-new {
+    text-align: center;
+}
+
+.author-row-new a {
+    display: inline-block;
+    font-size: 20px;
+    padding: 4px;
+}
+
+.author-row-new sup {
+    color: #313436;
+    font-size: 12px;
+}
+
+.affiliations-new {
+    font-size: 18px;
+    text-align: center;
+    width: 80%;
+    margin: 0 auto;
+    margin-bottom: 20px;
+}
+
+.row {
+    margin: 16px 0px 16px 0px;
+}
+.authors {
+    font-size: 26px;
+}
+.affiliatons {
+    font-size: 18px;
+}
+.affil-row {
+    margin-top: 18px;
+}
+.teaser {
+    max-width: 100%;
+}
+.text-center {
+    text-align: center;  
+}
+.screenshot {
+    width: 256px;
+    border: 1px solid #ddd;
+}
+.screenshot-el {
+    margin-bottom: 16px;
+}
+hr {
+    height: 1px;
+    border: 0;
+    border-top: 1px solid #ddd;
+    margin: 0;
+}
+.material-icons {
+    vertical-align: -6px;
+}
+p {
+    line-height: 1.25em;
+}
+.caption {
+    font-size: 16px;
+    color: #666;
+    margin-top: 4px;
+    margin-bottom: 10px;
+}
+video {
+    display: block;
+    margin: auto;
+}
+figure {
+    display: block;
+    margin: auto;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+#bibtex pre {
+    font-size: 14px;
+    background-color: #eee;
+    padding: 16px;
+}
+.green {
+    color: #0E710E;
+    font-weight: bold;
+}
+.orange {
+    color: #d35400;
+    font-weight: bold;
+}
+.flex-row {
+    display: flex;
+    flex-flow: row wrap;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.coming-soon {
+    position: absolute;
+    top: -15px;
+    right: -15px;
+}
+
+.paper-btn:hover {
+    color: #FF8563;
+    transform: translateY(-2px);
+}
+
+.paper-btn-parent {
+    display: flex;
+    justify-content: center;
+    margin: 16px 0px;
+    gap: 25px;
+    font-size: 20px;
+}
+
+.github-btn:hover {
+    color: #FF8563;
+    transform: translateY(-2px);
+}
+
+.container {
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+.venue {
+    font-size: 23px;
+}
+
+.topnav {
+    background-color: #EEEEEE;
+    overflow: hidden;
+}
+
+.topnav div {
+    max-width: 1070px;
+    margin: 0 auto;
+}
+
+.topnav a {
+    display: inline-block;
+    color: black;
+    text-align: center;
+    vertical-align: middle;
+    padding: 16px 16px;
+    text-decoration: none;
+    font-size: 18px;
+}
+
+.topnav img {
+    padding: 2px 0px;
+    width: 100%;
+    margin: 0.2em 0px 0.3em 0px;
+    vertical-align: middle;
+}
+
+pre {
+    font-size: 0.9em;
+    padding-left: 7px;
+    padding-right: 7px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    border-radius: 3px;
+    background-color: rgb(235, 235, 235);
+    overflow-x: auto;
+}
+
+.download-thumb {
+    display: flex;
+}
+
+@media only screen and (max-width: 620px) {
+    .download-thumb {
+        display: none;
+    }
+}
+
+.paper-stuff {
+    width: 50%;
+    font-size: 20px;
+}
+
+@media only screen and (max-width: 620px) {
+    .paper-stuff {
+        width: 100%;
+    }
+}
+* {
+  box-sizing: border-box;
+}
+
+.column {
+  text-align: center;
+  float: left;
+  width: 16.666%;
+  padding: 5px;
+}
+.column3 {
+  text-align: center;
+  float: left;
+  width: 33.333%;
+  padding: 5px;
+}
+.border-right {
+    border-right: 1px solid black;
+}
+.border-bottom{
+    border-bottom: 1px solid black;
+}
+
+/* Clearfix (clear floats) */
+.row::after {
+  content: "";
+  clear: both;
+  display: table;
+}
+
+.image-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.25fr;
+    gap: 10px;
+    width: 100%; 
+}
+
+.image-grid img {
+    width: 100%; 
+}
+
+.image-grid img:first-child {
+    object-fit: contain;
+}
+/* Responsive layout - makes the three columns stack on top of each other instead of next to each other */
+@media screen and (max-width: 500px) {
+  .column {
+    width: 100%;
+  }
+}
+@media screen and (max-width: 500px) {
+  .column3 {
+    width: 100%;
+  }
+}
+
+.figure img {
+    width: 100%; 
+}
+
+.image-grid-three {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    width: 90%;
+    justify-items: center;
+    margin: 0 auto;
+}
+
+.image-grid-three img {
+    width: 100%; 
+}
+
+.image-grid-tab {
+    text-align: center;
+    justify-content: center;
+    display: grid;
+    place-items: center;
+    grid-template-columns: 1fr 1.22fr;
+    gap: 10px;
+    width: 90%;
+    justify-items: center;
+    margin: 0 auto;
+}
+
+.image-grid-tab img {
+    width: 100%; 
+}
+
+blockquote {
+    background-color: rgba(40, 40, 40, 0.2);
+    padding: 0px;
+    margin: 2px 0;
+    border-radius: 10px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 12px;
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.results-table th, .results-table td {
+    border: 1px solid #ddd;
+    padding: 6px 8px;
+    text-align: center;
+}
+
+.results-table th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    font-size: 11px;
+}
+
+.results-table .paradigm-cell {
+    writing-mode: vertical-lr;
+    text-orientation: mixed;
+    font-weight: bold;
+    background-color: #f0f0f0;
+    width: 80px;
+}
+
+.results-table .model-name {
+    text-align: left;
+    padding-left: 12px;
+}
+
+.results-table .highlight-row {
+    background-color: #fff3cd;
+}
+
+.results-table .best-score {
+    font-weight: bold;
+    color: #0E710E;
+}
+
+</style>
+
+<script type="text/javascript" src="../js/hidebib.js"></script>
+    <link href='https://fonts.googleapis.com/css?family=Titillium+Web:400,600,400italic,600italic,300,300italic' rel='stylesheet' type='text/css'>
+    <head>
+        <title>reAR: Regularizing Consistency in Visual Autoregressive Generation</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta property="og:description" content="reAR: Regularizing Consistency in Visual Autoregressive Generation"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+        <link href="https://fonts.googleapis.com/css2?family=FontAwesome" rel="stylesheet">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:creator" content="">
+        <meta name="twitter:title" content="reAR: Regularizing Consistency in Visual Autoregressive Generation">
+    </head>
+
+ <body>
+<div class="container">
+    <div class="paper-title">
+    <h1>
+        <font color="#0E710E">re</font><font color="#0E710E">A</font><font color="#0E710E">R</font>: Rethinking Visual Autoregressive Models via Generator-Tokenizer Consistency Regularization
+    </h1>
+    </div>
+
+    <div id="authors">
+        <center>
+            <div class="author-row-new">
+                <a href="https://qy-h00.github.io/">Qiyuan He<sup>1</sup></a>,
+                <a href="#">Yicong Li<sup>1</sup></a>,
+                <a href="#">Haotian Ye<sup>2</sup></a>,
+                <a href="https://personal-page.wjh.app/">Jinghao Wang<sup>3</sup></a>,
+                <a href="#">Xinyao Liao<sup>1</sup></a>,
+                <a href="https://appsrv.cse.cuhk.edu.hk/~pheng/index.php"><strong>Pheng-Ann Heng</strong><sup>3</sup></a>,
+                <a href="#"><strong>Stefano Ermon</strong><sup>2</sup></a>,
+                <a href="#"><strong>James Zou</strong><sup>2</sup></a>,
+                <a href="https://www.comp.nus.edu.sg/~ayao//"><strong>Angela Yao</strong><sup>1</sup></a>
+            </div>
+        </center>
+        <center>
+        <div class="affiliations">
+            <span><sup>1</sup>National University of Singapore</span>&nbsp;&nbsp;&nbsp;
+            <span><sup>2</sup>Stanford University</span>&nbsp;&nbsp;&nbsp;
+            <span><sup>3</sup>The Chinese University of Hong Kong</span> <br/>
+        </div>
+            <div class="affil-row">
+            <!-- <div class="venue text-center"><b>Under Review</b></div> -->
+        </div>
+
+        </center>
+
+        <div style="clear: both">
+            <div class="paper-btn-parent">
+                <a class="paper-btn" href="https://arxiv.org/abs/2510.04450">
+                    <span class="fas fa-file-alt"></span> 
+                    Paper
+                </a>   
+                <a class="github-btn" href="https://github.com/QY-H00/reAR">
+                    <span class="fab fa-github"></span> 
+                    Code
+                </a>           
+           </div>
+        </div>
+        <div class="figure">
+            <img src="figs/teaser.png" alt="reAR Teaser">
+        </div>    
+    </div>
+    <section id="news">
+        <h2>News</h2>
+        <hr>
+        <div class="row">
+            <div><span class="material-icons"> event </span> [Oct 2025] Code, Trained Model and Project page are released.</div>
+        </div>
+    </section>
+
+    <section>
+        <h2>Abstract</h2>
+        <hr>
+        <p>
+            Visual autoregressive (AR) generation offers a promising path toward unifying vision and language models, yet its performance remains suboptimal against diffusion models. Prior work often attributes this gap to tokenizer limitations and rasterization ordering. In this work, we identify a core bottleneck from the perspective of <b>generator-tokenizer inconsistency</b>, i.e., the AR-generated tokens may not be well-decoded by the tokenizer.
+        </p>    
+
+        <p>
+            To address this, we propose <b>reAR</b>, a simple training strategy introducing a token-wise regularization objective: when predicting the next token, the causal transformer is also trained to recover the visual embedding of the current token and predict the embedding of the target token under a noisy context. It requires no changes to the tokenizer, generation order, inference pipeline, or external models.
+        </p>
+        <p>
+            <blockquote>    
+                <p>
+                Despite its simplicity, reAR <b>substantially improves performance</b>. On ImageNet, it reduces gFID from 3.02 to 1.86 and improves IS to 316.9 using a standard rasterization-based tokenizer. When applied to advanced tokenizers, it achieves a <b>gFID of 1.42 with only 177M parameters</b>, matching the performance with larger state-of-the-art diffusion models (675M).
+                </p>
+            </blockquote>    
+        </p>
+
+        <div class="figure">
+            <div>
+                <img src="figs/pipeline.png" alt="reAR Pipeline">
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2>Understanding the Bottleneck</h2>
+        <hr>
+        <h3>Generator-Tokenizer Inconsistency</h3>
+        <p>
+            We identify two key sources of inconsistency between the autoregressive generator and the visual tokenizer:
+        </p>
+        
+        <p>
+            <b>1. Amplified Exposure Bias:</b> During training with teacher forcing, the model predicts tokens given ground-truth context, but at inference it conditions on its own predictions. In visual AR, this leads to unseen token sequences that corrupt future predictions and spread structural artifacts across the image.
+        </p>
+        
+        <p>
+            <b>2. Embedding Unawareness:</b> The AR model optimizes only discrete token indices without considering how these tokens are embedded by the tokenizer. However, decoded image quality depends on the embeddings of the generated tokens rather than their indices alone.
+        </p>
+
+        <div class="figure" style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin: 30px 0; width: 90%; margin-left: auto; margin-right: auto;">
+            <div>
+                <img src="figs/exposure_bias.png" alt="Exposure Bias" style="width: 100%; height: auto;">
+                <p class="caption" style="text-align: center; margin-top: 10px;">
+                    <strong>Amplified Exposure Bias</strong>
+                </p>
+            </div>
+            <div>
+                <img src="figs/embedding_unawareness.png" alt="Embedding Unawareness" style="width: 100%; height: auto;">
+                <p class="caption" style="text-align: center; margin-top: 10px;">
+                    <strong>Embedding Unawareness</strong>
+                </p>
+            </div>
+        </div>
+
+        <h3>Token-wise Consistency Regularization</h3>
+
+        <p>
+            reAR addresses these issues through two complementary strategies: <b>Noisy Context Regularization</b> that exposes the model to perturbed context during training, and <b>Codebook Embedding Regularization</b> that aligns the generator's hidden states with the tokenizer's embedding space. This encourages the generator to be aware of how tokens are decoded into visual patches.
+        </p>
+    </section>
+
+    <section>
+        <h2>Results</h2>
+        <hr>
+        <h3>Generation Quality</h3>
+        <p>
+            Table 1 shows that reAR achieves strong results even with a standard raster-order AR model and a simple 2D patch tokenizer. reAR-S outperforms prior raster AR models like LlamaGen-XL (FID 2.00 vs. 2.34; IS 295.7 vs. 253.9) using only 14% of the parameters (201M vs. 1.4B), and surpasses advanced-tokenizer AR models such as WeTok with just 13–15% of their size. It matches RAR and outperforms RandAR under similar scales, and reAR-L exceeds MAR-L and VAR-d30. While diffusion and masked-generation models remain strong, reAR narrows the gap with far fewer training epochs.
+        </p>
+        
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th>Training<br>Paradigm</th>
+                    <th>Generation<br>Model</th>
+                    <th>Tokenizer<br>Type</th>
+                    <th>Tokenizer<br>BPP<sub>16</sub> &darr;</th>
+                    <th>Training<br>Epochs</th>
+                    <th>#Params &darr;</th>
+                    <th>FID &darr;</th>
+                    <th>IS &uarr;</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td rowspan="4" class="paradigm-cell">Diffusion</td>
+                    <td class="model-name">LDM-4</td>
+                    <td>Patch-VAE</td>
+                    <td>N/A</td>
+                    <td>200</td>
+                    <td>400M</td>
+                    <td>3.60</td>
+                    <td>247.7</td>
+                </tr>
+                <tr>
+                    <td class="model-name">DiT-XL</td>
+                    <td>Patch-VAE</td>
+                    <td>N/A</td>
+                    <td>1400</td>
+                    <td>675M</td>
+                    <td>2.27</td>
+                    <td>278.2</td>
+                </tr>
+                <tr>
+                    <td class="model-name">SiT-XL</td>
+                    <td>Patch-VAE</td>
+                    <td>N/A</td>
+                    <td>800</td>
+                    <td>675M</td>
+                    <td>2.06</td>
+                    <td>270.3</td>
+                </tr>
+                <tr>
+                    <td class="model-name">REPA</td>
+                    <td>Patch-VAE</td>
+                    <td>N/A</td>
+                    <td>800</td>
+                    <td>675M</td>
+                    <td><span class="best-score">1.42</span></td>
+                    <td>305.7</td>
+                </tr>
+                <tr>
+                    <td rowspan="2" class="paradigm-cell">MAR</td>
+                    <td class="model-name">MAR-L</td>
+                    <td>Patch-VAE</td>
+                    <td>N/A</td>
+                    <td>800</td>
+                    <td>479M</td>
+                    <td>1.98</td>
+                    <td>290.3</td>
+                </tr>
+                <tr>
+                    <td class="model-name">MAR-H</td>
+                    <td>Patch-VAE</td>
+                    <td>N/A</td>
+                    <td>800</td>
+                    <td>943M</td>
+                    <td>1.55</td>
+                    <td>303.7</td>
+                </tr>
+                <tr>
+                    <td rowspan="5" class="paradigm-cell">Mask.</td>
+                    <td class="model-name">MaskGIT-re</td>
+                    <td>Patch-VQ</td>
+                    <td>0.625</td>
+                    <td>300</td>
+                    <td>227M</td>
+                    <td>4.02</td>
+                    <td>355.6</td>
+                </tr>
+                <tr>
+                    <td class="model-name">MAGVIT-v2</td>
+                    <td>Patch-VQ</td>
+                    <td>1.125</td>
+                    <td>1080</td>
+                    <td>307M</td>
+                    <td>1.78</td>
+                    <td>319.4</td>
+                </tr>
+                <tr>
+                    <td class="model-name">Maskbit</td>
+                    <td>Patch-LFQ</td>
+                    <td>0.875</td>
+                    <td>1080</td>
+                    <td>305M</td>
+                    <td>1.52</td>
+                    <td>328.6</td>
+                </tr>
+                <tr>
+                    <td class="model-name">Mask-TiTok-64</td>
+                    <td>TiTok</td>
+                    <td>0.188</td>
+                    <td>800</td>
+                    <td>177M</td>
+                    <td>2.48</td>
+                    <td>214.7</td>
+                </tr>
+                <tr>
+                    <td class="model-name">Mask-TiTok-128</td>
+                    <td>TiTok</td>
+                    <td>0.375</td>
+                    <td>800</td>
+                    <td>287M</td>
+                    <td>1.97</td>
+                    <td>281.8</td>
+                </tr>
+                <tr>
+                    <td rowspan="2" class="paradigm-cell">VAR</td>
+                    <td class="model-name">VAR-d20</td>
+                    <td>VAR</td>
+                    <td>1.992</td>
+                    <td>350</td>
+                    <td>600M</td>
+                    <td>2.57</td>
+                    <td>302.6</td>
+                </tr>
+                <tr>
+                    <td class="model-name">VAR-d30</td>
+                    <td>VAR</td>
+                    <td>1.992</td>
+                    <td>350</td>
+                    <td>2.0B</td>
+                    <td>1.92</td>
+                    <td>323.1</td>
+                </tr>
+                <tr>
+                    <td rowspan="6" class="paradigm-cell">Rand.<br>Causal<br>AR</td>
+                    <td class="model-name">RAR-B</td>
+                    <td>Patch-VQ</td>
+                    <td>0.625</td>
+                    <td>400</td>
+                    <td>261M</td>
+                    <td>1.95</td>
+                    <td>290.5</td>
+                </tr>
+                <tr>
+                    <td class="model-name">RAR-L</td>
+                    <td>Patch-VQ</td>
+                    <td>0.625</td>
+                    <td>400</td>
+                    <td>461M</td>
+                    <td>1.70</td>
+                    <td>299.5</td>
+                </tr>
+                <tr>
+                    <td class="model-name">RAR-XL</td>
+                    <td>Patch-VQ</td>
+                    <td>0.625</td>
+                    <td>400</td>
+                    <td>955M</td>
+                    <td>1.50</td>
+                    <td>306.9</td>
+                </tr>
+                <tr>
+                    <td class="model-name">RandAR-L</td>
+                    <td>Patch-VQ</td>
+                    <td>0.875</td>
+                    <td>300</td>
+                    <td>343M</td>
+                    <td>2.55</td>
+                    <td>288.8</td>
+                </tr>
+                <tr>
+                    <td class="model-name">RandAR-XL</td>
+                    <td>Patch-VQ</td>
+                    <td>0.875</td>
+                    <td>300</td>
+                    <td>775M</td>
+                    <td>2.25</td>
+                    <td>317.8</td>
+                </tr>
+                <tr>
+                    <td class="model-name">RandAR-XXL</td>
+                    <td>Patch-VQ</td>
+                    <td>0.875</td>
+                    <td>300</td>
+                    <td>1.4B</td>
+                    <td>2.15</td>
+                    <td>322.0</td>
+                </tr>
+                <tr>
+                    <td rowspan="3" class="paradigm-cell">Tok.<br>Causal<br>AR</td>
+                    <td class="model-name">AR-FlexTok-XL</td>
+                    <td>FlexTok</td>
+                    <td>0.125</td>
+                    <td>300</td>
+                    <td>1.3B</td>
+                    <td>2.02</td>
+                    <td>--</td>
+                </tr>
+                <tr>
+                    <td class="model-name">AR-GigaTok-XXL</td>
+                    <td>GigaTok</td>
+                    <td>0.875</td>
+                    <td>300</td>
+                    <td>1.4B</td>
+                    <td>1.98</td>
+                    <td>256.8</td>
+                </tr>
+                <tr>
+                    <td class="model-name">AR-WeTok-XL</td>
+                    <td>WeTok</td>
+                    <td>1.667</td>
+                    <td>300</td>
+                    <td>1.5B</td>
+                    <td>2.31</td>
+                    <td>276.6</td>
+                </tr>
+                <tr>
+                    <td rowspan="8" class="paradigm-cell">Raster.<br>Causal<br>AR</td>
+                    <td class="model-name">VQGAN-re</td>
+                    <td>Patch-VQ</td>
+                    <td>0.875</td>
+                    <td>100</td>
+                    <td>1.4B</td>
+                    <td>5.20</td>
+                    <td>280.3</td>
+                </tr>
+                <tr>
+                    <td class="model-name">Open-MAGVIT-v2</td>
+                    <td>Patch-LFQ</td>
+                    <td>1.125</td>
+                    <td>300</td>
+                    <td>1.5B</td>
+                    <td>2.33</td>
+                    <td>271.8</td>
+                </tr>
+                <tr>
+                    <td class="model-name">LlamaGen-XL</td>
+                    <td>Patch-VQ</td>
+                    <td>0.875</td>
+                    <td>300</td>
+                    <td>775M</td>
+                    <td>2.62</td>
+                    <td>244.1</td>
+                </tr>
+                <tr>
+                    <td class="model-name">LlamaGen-XXL</td>
+                    <td>Patch-VQ</td>
+                    <td>0.875</td>
+                    <td>300</td>
+                    <td>1.4B</td>
+                    <td>2.34</td>
+                    <td>253.9</td>
+                </tr>
+                <tr style="border-top: 2px solid #666;">
+                    <td class="model-name">AR-L&dagger;</td>
+                    <td>Patch-VQ</td>
+                    <td>0.625</td>
+                    <td>400</td>
+                    <td>461M</td>
+                    <td>3.02</td>
+                    <td>256.2</td>
+                </tr>
+                <tr class="highlight-row">
+                    <td class="model-name">&nbsp;&nbsp;&nbsp;&nbsp;reAR-S</td>
+                    <td>Patch-VQ</td>
+                    <td>0.625</td>
+                    <td>400</td>
+                    <td>201M</td>
+                    <td><span class="best-score">2.00</span></td>
+                    <td><span class="best-score">295.7</span></td>
+                </tr>
+                <tr class="highlight-row">
+                    <td class="model-name">&nbsp;&nbsp;&nbsp;&nbsp;reAR-B</td>
+                    <td>Patch-VQ</td>
+                    <td>0.625</td>
+                    <td>400</td>
+                    <td>261M</td>
+                    <td><span class="best-score">1.91</span></td>
+                    <td><span class="best-score">300.9</span></td>
+                </tr>
+                <tr class="highlight-row">
+                    <td class="model-name">&nbsp;&nbsp;&nbsp;&nbsp;reAR-L (cfg=10.0/11.0)</td>
+                    <td>Patch-VQ</td>
+                    <td>0.625</td>
+                    <td>400</td>
+                    <td>461M</td>
+                    <td><span class="best-score">1.86/1.90</span></td>
+                    <td><span class="best-score">316.9/323.2</span></td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <p style="font-size: 14px; color: #666; margin-top: 10px;">
+            <strong>Table:</strong> Results on 256x256 class-conditional generation on ImageNet-1K. "Mask." indicates masked generation; "Tok." denotes non-standard tokenization; "Rand." denotes randomized order; "Raster." denotes rasterization order. "&dagger;" indicates that the model is not provided and it's trained with our implementation. BPP<sub>16</sub>=16×BPP (bits per pixel) measures the compression rate of discrete tokenizers and is not applicable ("N/A") to continuous tokenizers. "#Params" is the number of model parameters. "&uarr;" and "&darr;" indicate whether higher or lower values are better, respectively.
+        </p>
+        
+        <h3>Generalization</h3>
+        <p>
+            We also evaluate reAR on non-standard tokenizers TiTok and AliTok. Unlike RAR, which helps mainly on bidirectional tokenization, reAR consistently improves performance on both bidirectional (TiTok: 4.45 → 4.01) and unidirectional (AliTok: 1.50 → 1.42) tokenizers. Notably, it approaches diffusion-based REPA and outperforms Maskbit while using far fewer parameters (177M vs. 675M/305M).
+        </p>
+        
+        <table class="results-table" style="font-size: 11px; margin: 20px auto; width: 70%;">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Epochs</th>
+                    <th>Params</th>
+                    <th>FID ↓</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="model-name">Maskbit</td>
+                    <td>1080</td>
+                    <td>305M</td>
+                    <td>1.52</td>
+                </tr>
+                <tr>
+                    <td class="model-name">REPA</td>
+                    <td>800</td>
+                    <td>675M</td>
+                    <td>1.42</td>
+                </tr>
+                <tr style="border-top: 1px solid #999;">
+                    <td class="model-name">AR-TiTok-b64</td>
+                    <td>400</td>
+                    <td>261M</td>
+                    <td>4.45</td>
+                </tr>
+                <tr>
+                    <td class="model-name">&nbsp;&nbsp;&nbsp;&nbsp;RAR-TiTok-b64</td>
+                    <td>400</td>
+                    <td>261M</td>
+                    <td>4.07</td>
+                </tr>
+                <tr class="highlight-row">
+                    <td class="model-name">&nbsp;&nbsp;&nbsp;&nbsp;reAR-TiTok-b64</td>
+                    <td>400</td>
+                    <td>261M</td>
+                    <td><span class="best-score">4.01</span></td>
+                </tr>
+                <tr style="border-top: 1px solid #999;">
+                    <td class="model-name">AR-AliTok-B</td>
+                    <td>800</td>
+                    <td>177M</td>
+                    <td>1.50</td>
+                </tr>
+                <tr>
+                    <td class="model-name">&nbsp;&nbsp;&nbsp;&nbsp;RAR-B-AliTok</td>
+                    <td>800</td>
+                    <td><strong>177M</strong></td>
+                    <td>1.52</td>
+                </tr>
+                <tr class="highlight-row">
+                    <td class="model-name">&nbsp;&nbsp;&nbsp;&nbsp;reAR-B-AliTok</td>
+                    <td>800</td>
+                    <td><strong>177M</strong></td>
+                    <td><span class="best-score">1.42</span></td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <p style="font-size: 14px; color: #666; margin-top: 10px; text-align: center;">
+            <strong>Table 2:</strong> Superior generalization ability. reAR adapts to different tokenizers and achieves state-of-the-art performance with smaller models.
+        </p>
+
+        <h3>Scaling Effect</h3>
+        <p>
+            We also study if the scaling behavior of the original AR model maintains with reAR. Specifically, we plot the FID under different training epochs for each model size. As Figure 1 shows, the FID consistently decreases as model size and training iteration increase, revealing the potential of reAR on large-scale visual AR models.
+        </p>
+        
+        <div class="figure">
+            <img src="figs/scaling.png" alt="Scaling Effect of reAR">
+            <p class="caption">
+                <strong>Figure 1:</strong> Scaling Effect of reAR. As model size increases, the FID at each training step decreases consistently.
+            </p>
+        </div>
+
+        <h3>Sampling Speed</h3>
+        <p>
+            Like other autoregressive models, reAR benefits from KV-cache to achieve high sampling speed. We measure throughput on a single A800 GPU with batch size 128. With KV-cache, autoregressive models can run much faster than diffusion and MAR. Moreover, reAR-B-AliTok achieves lower FID with faster sampling speed even against parallel-decoding approaches such as Maskbit, TiTok, VAR, and RandAR.
+        </p>
+        
+        <div class="figure">
+            <img src="figs/sampling_speed.png" alt="Sampling Speed Comparison">
+            <p class="caption">
+                <strong>Figure 2:</strong> Sampling Speed. Comparison of different methods on FID and throughput (images/sec).
+            </p>
+        </div>
+
+        <h3>Visual Quality Improvements</h3>
+        <p>
+            reAR demonstrates significant improvements in visual quality. The model generates more coherent and detailed images compared to baseline autoregressive models. The improvements are particularly notable in maintaining consistency across the entire image and reducing artifacts that typically arise from exposure bias.
+        </p>
+
+        <div class="image-grid">
+            <img src="figs/app_vis_alitok/image_grid_001_goldfish.png" alt="Generated Image 1">
+            <img src="figs/app_vis_alitok/image_grid_151_chihuahua.png" alt="Generated Image 2">
+        </div>
+    </section>
+
+    <section id="bibtex">
+        <h2>Citation</h2>
+        <hr>
+        <pre><code>@article{he2025rear,
+    title={reAR: Rethinking Visual Autoregressive Models via Generator-Tokenizer Consistency Regularization},
+    author={Qiyuan He and Yicong Li and Haotian Ye and Jinghao Wang and Xinyao Liao and Pheng-Ann Heng and Stefano Ermon and James Zou and Angela Yao},
+    year={2025},
+    journal={arXiv preprint},
+}</code></pre>
+    </section>
+
+</div>
+</body>
+</html>
