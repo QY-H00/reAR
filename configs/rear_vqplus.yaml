@@ -1,0 +1,94 @@
+experiment:
+    project: "reAR"
+    name: "rear-l-vqplus"
+    max_train_examples: 1_281_167
+    save_every: 50_000
+    eval_every: 50_000
+    generate_every: 5_000
+    log_every: 50
+    log_grad_norm_every: 1_000
+    resume: True
+    tokenizer_checkpoint: "ckpt/vqplus.bin"
+
+model:
+    vq_model:
+        model_type: "vqplus"
+        quantizer_type: "lookup"
+        codebook_size: 4096
+        token_size: 64
+        commitment_cost: 0.25
+        entropy_loss_weight: 0.0
+        entropy_loss_temperature: 0.01
+        entropy_gamma: 1.0
+        num_channels: 3  # rgb
+        hidden_channels: 128
+        channel_mult: [1,1,2,2,4]
+        num_resolutions: 5
+        num_res_blocks: 2
+        sample_with_conv: True
+    
+    generator:
+        hidden_size: 1024
+        num_hidden_layers: 24
+        num_attention_heads: 16
+        intermediate_size: 4096
+        dropout: 0.1
+        attn_drop: 0.1
+        class_label_dropout: 0.1
+        image_seq_len: 256
+        condition_num_classes: 1000
+
+        randomize_temperature: 1.0
+        guidance_scale: 15.0
+        guidance_scale_pow: 2.5
+        use_checkpoint: False # True to save memory
+        kv_cache: True
+
+        perturb_mode: "switch"
+        randomness_anneal_start: 0
+        randomness_anneal_end: 187500
+        
+        transition_alignment: True
+        transition_alignment_weight: 1.0
+        encode_align_layer_idx: 0
+        decode_align_layer_idx: 18
+
+dataset:
+    params:
+        # use pretokenized dataset for speed-up
+        pretokenization: "dataset/pretokenized/vqplus.jsonl"
+        train_shards_path_or_url: "dataset/imagenet_sharded/train/imagenet-train-{0000..1023}.tar"
+        eval_shards_path_or_url: "dataset/imagenet_sharded/val/imagenet-val-{0000..0063}.tar"
+        num_workers_per_gpu: 12
+    preprocessing:
+        resize_shorter_edge: 256
+        crop_size: 256
+        random_crop: False
+        random_flip: True
+
+optimizer:
+    name: adamw 
+    params:
+        learning_rate: 1e-4
+        beta1: 0.9
+        beta2: 0.96
+        weight_decay: 0.03
+
+
+lr_scheduler:
+    scheduler: "cosine"
+    params:
+        learning_rate: ${optimizer.params.learning_rate}
+        warmup_steps: 62_500 # 100 epochs with bsz 2048
+        end_lr: 1e-5
+
+training:
+    gradient_accumulation_steps: 2
+    per_gpu_batch_size: 128 # 8 GPU, total batch size 2048
+    mixed_precision: "bf16"
+    enable_tf32: True
+    enable_wandb: True
+    use_ema: False
+    seed: 42
+    max_train_steps: 250_000
+    max_grad_norm: 1.0
