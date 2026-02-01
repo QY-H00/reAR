@@ -3,8 +3,8 @@
 
 <div align="center">
 <a href=xx target="_blank"><img src=https://img.shields.io/badge/arXiv-b5212f.svg?logo=arxiv height=20px></a>
-<!-- <a href=https://huggingface.co/spaces/qyoo/Conceptrol target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=25px></a> -->
-<a href=xx target="_blank"><img src= https://img.shields.io/badge/GitHub%20Project%20Page-bb8a2e.svg?logo=github height=20px></a>
+<a href=https://huggingface.co/qyoo/reAR target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=20px></a>
+<a href=https://qy-h00.github.io/reAR target="_blank"><img src= https://img.shields.io/badge/GitHub%20Project%20Page-bb8a2e.svg?logo=github height=20px></a>
 </div>
 
 <br>
@@ -35,20 +35,11 @@
 <p align="center">
   <img src="assets/pipeline.png">
 </p>
-<!-- <p align="left">
-<strong>Overview: We propose reAR, a simple regularization method that fixes generator-tokenizer inconsistency in visual autoregressive models, i.e, let the AR model generates tokens that is more friendly for the decoder of visual tokenizer. Without altering tokenization and inference, reAR boosts AR on vanilla VQGAN to 1.86 (461M) and AliTok to 1.42 (177M).</strong>
-</p> -->
 
 <p align="left">
 <strong>Overview</strong>: We propose reAR, a simple regularization method that fixes generator-tokenizer inconsistency in visual autoregressive models, i.e, let the AR model generates tokens that is more friendly for the decoder of visual tokenizer. Without altering tokenization and inference, reAR boosts AR on vanilla VQGAN to 1.86 (461M) and AliTok to 1.42 (177M).
 </p>
 </div>
-
-<!-- This repository contains the official implementation of the paper **"reAR: Rethink Standard Visual Autoregressive Generation via Robust Embedding Regularization"**. -->
-
-<!-- ## 🎯 Overview
-
-We identify a key bottleneck in visual autoregressive models: generator–tokenizer inconsistency, where **AR-generated tokens are not well decoded by the tokenizer**. To address this, we propose reAR, a simple token-wise regularization strategy that trains the AR model to recover the embedding of the current token and predict the target embedding under noisy context. reAR introduces no changes to the tokenization or inference pipeline, yet substantially improves performance. On ImageNet, it reduces gFID to 1.86 and boosts IS to 316.9 based on vanilla VQGAN, and with advanced tokenizers achieves a gFID of 1.42 using only 177M parameters. -->
 
 
 ## 🚀 Quick Start
@@ -107,6 +98,15 @@ Download the MaskGiT-VQGAN tokenizer:
 # Download tokenizer checkpoint
 wget https://huggingface.co/fun-research/TiTok/resolve/main/maskgit-vqgan-imagenet-f16-256.bin -O ckpt/maskgitvq.bin
 ```
+
+(Optional for direct evaluation) You can also find the checkpoints below:
+
+| Model   | Checkpoints |
+|---------|-------------------------|
+| reAR-S  | [reAR-S.safetensors](https://huggingface.co/qyoo/reAR/blob/main/reAR-S.safetensors) |
+| reAR-B  | [reAR-B.safetensors](https://huggingface.co/qyoo/reAR/blob/main/reAR-B.safetensors) |
+| reAR-L  | [reAR-L.safetensors](https://huggingface.co/qyoo/reAR/blob/main/reAR-L.safetensors) |
+
 
 ## 🏋️ Training
 
