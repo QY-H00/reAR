@@ -1,6 +1,10 @@
 <div align="center">
 <h1>reAR: Rethink Visual Autoregressive Generation via Generator-Tokenizer Consistency Regularization</h1>
 
+<p align="center">
+ICLR 2026 Paper
+</p>
+
 <div align="center">
 <a href=https://arxiv.org/abs/2510.04450 target="_blank"><img src=https://img.shields.io/badge/arXiv-b5212f.svg?logo=arxiv height=20px></a>
 <a href=https://huggingface.co/qyoo/reAR target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face%20Space-276cb4.svg height=20px></a>
