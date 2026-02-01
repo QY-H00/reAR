@@ -99,7 +99,7 @@ Download the MaskGiT-VQGAN tokenizer:
 wget https://huggingface.co/fun-research/TiTok/resolve/main/maskgit-vqgan-imagenet-f16-256.bin -O ckpt/maskgitvq.bin
 ```
 
-(Optional for direct evaluation) You can also find the checkpoints below:
+Alternatively, for direct evaluation, the following checkpoints are available:
 
 | Model   | Checkpoints |
 |---------|-------------------------|
