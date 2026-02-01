@@ -201,5 +201,3 @@ swanlog/
 *.fdb_latexmk
 *.log
 *.out
-
-figs
