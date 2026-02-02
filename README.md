@@ -18,10 +18,10 @@ ICLR 2026 Paper
   <a href="https://qy-h00.github.io" target="_blank">Qiyuan He</a><sup>1</sup> &nbsp;
   <a target="_blank">Yicong Li</a><sup>1</sup> &nbsp;
   <a target="_blank">Haotian Ye</a><sup>2</sup> &nbsp;
-  <a target="_blank">Jinghao Wang</a><sup>3</sup> &nbsp;
+  <a href="https://personal-page.wjh.app/" target="_blank">Jinghao Wang</a><sup>3</sup> &nbsp;
   <a target="_blank">Xinyao Liao</a><sup>1</sup> &nbsp;
   
-  <a target="_blank">Pheng-Ann Heng</a><sup>3</sup> &nbsp;
+  <a href="https://www.cse.cuhk.edu.hk/people/faculty/pheng-ann-heng/" target="_blank">Pheng-Ann Heng</a><sup>3</sup> &nbsp;
   <a target="_blank">Stefano Ermon</a><sup>2</sup> &nbsp;
   <a target="_blank">James Zhou</a><sup>2</sup> &nbsp;
   <a href="https://www.comp.nus.edu.sg/~ayao//" target="_blank">Angela Yao</a><sup>1</sup>
